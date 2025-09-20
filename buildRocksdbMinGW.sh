@@ -16,12 +16,16 @@ for arg in "$@"; do
 done
 
 if [ -z "${ARCH}" ]; then
-  echo "Usage: $0 --arch=x86_64"
+  echo "Usage: $0 --arch=x86_64|arm64"
   exit 1
 fi
 
 WINDOWS_MIN_VERSION_C_FLAGS="-U_WIN32_WINNT -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -pthread -include stdint.h"
 WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_error"
+
+if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
+  export PATH="${LLVM_MINGW_ROOT}/bin:${PATH}"
+fi
 
 case "$ARCH" in
   x86_64)
@@ -39,6 +43,33 @@ case "$ARCH" in
     EXTRA_C_FLAGS="-march=i686 ${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="-march=i686 ${WINDOWS_MIN_VERSION_CXX_FLAGS}"
     OBJ_DIR="build/lib/mingw_i686"
+    ;;
+  arm64|aarch64)
+    TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
+    if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+      CC="${TOOLCHAIN_TRIPLE}-gcc"
+      CXX="${TOOLCHAIN_TRIPLE}-g++"
+      USING_CLANG=0
+    elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+      CC="${TOOLCHAIN_TRIPLE}-clang"
+      if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+        CXX="${TOOLCHAIN_TRIPLE}-clang++"
+      else
+        CXX="${TOOLCHAIN_TRIPLE}-clang"
+      fi
+      USING_CLANG=1
+    else
+      echo "Unsupported ARM64 toolchain: expected ${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang in PATH" >&2
+      exit 1
+    fi
+    CMAKE_TOOLCHAIN_FLAGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64"
+    if [[ "${USING_CLANG:-0}" -eq 1 ]]; then
+      CMAKE_TOOLCHAIN_FLAGS+=" -DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+      CMAKE_TOOLCHAIN_FLAGS+=" -DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+    fi
+    EXTRA_C_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS}"
+    EXTRA_CXX_FLAGS="${WINDOWS_MIN_VERSION_CXX_FLAGS}"
+    OBJ_DIR="build/lib/mingw_arm64"
     ;;
   *)
     echo "Unsupported ARCH: $ARCH"

@@ -63,6 +63,33 @@ jobs:
           name: rocksdb-mingw-x86_64
           path: build/archives/rocksdb-mingw-x86_64.zip
 
+  mingw-arm64:
+    name: Windows (MinGW) ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip clang xz-utils
+      - name: Install LLVM MinGW toolchain
+        run: |
+          LLVM_MINGW_VERSION=20250910
+          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64
+          curl -sSL -o llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${LLVM_MINGW_DIST}.tar.xz"
+          mkdir -p "$RUNNER_TEMP/llvm-mingw"
+          tar -xJf llvm-mingw.tar.xz -C "$RUNNER_TEMP/llvm-mingw" --strip-components=1
+          echo "LLVM_MINGW_ROOT=$RUNNER_TEMP/llvm-mingw" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/llvm-mingw/bin" >> "$GITHUB_PATH"
+      - name: Build Windows ARM64 MinGW package
+        run: ./build.sh mingwArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-mingw-arm64
+          path: build/archives/rocksdb-mingw-arm64.zip
+
   macos-x64:
     name: macOS x86_64
     runs-on: macos-latest
@@ -189,12 +216,35 @@ jobs:
           name: rocksdb-tvos-simulator-arm64
           path: build/archives/rocksdb-tvos-simulator-arm64.zip
 
+  windows-arm64-smoke:
+    name: Windows ARM64 Smoke Test
+    runs-on:
+      - windows-2022
+      - ARM64
+    needs:
+      - mingw-arm64
+    continue-on-error: true
+    steps:
+      - name: Download Windows ARM64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rocksdb-mingw-arm64
+          path: windows-arm64
+      - name: Verify ARM64 artifact contents
+        shell: pwsh
+        run: |
+          Expand-Archive -Path 'windows-arm64/rocksdb-mingw-arm64.zip' -DestinationPath 'windows-arm64/unpacked' -Force
+          if (-not (Test-Path -Path 'windows-arm64/unpacked/lib/librocksdb.a')) {
+            throw 'librocksdb.a not found in ARM64 artifact'
+          }
+
   publish-release:
     name: Publish Release
     needs:
       - linux-x64
       - linux-arm64
       - mingw-x64
+      - mingw-arm64
       - macos-x64
       - macos-arm64
       - ios-arm64

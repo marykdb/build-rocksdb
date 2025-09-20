@@ -20,7 +20,7 @@ Options:
   -h, --help                 Show this help message and exit.
 
 Configs:
-  linuxX64, linuxArm64, mingwX64,
+  linuxX64, linuxArm64, mingwX64, mingwArm64,
   macosX64, macosArm64, iosArm64, iosSimulatorArm64,
   watchosArm64, watchosDeviceArm64, watchosSimulatorArm64,
   tvosArm64, tvosSimulatorArm64
@@ -96,6 +96,17 @@ register_config \
   artifact "rocksdb-mingw-x86_64.zip" \
   cmake_flags "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64" \
   requires_konan_mode always
+
+register_config \
+  mingwArm64 \
+  host LINUX \
+  konan_target "" \
+  output_dir mingw_arm64 \
+  build_script buildRocksdbMinGW.sh \
+  build_args "--arch=arm64" \
+  artifact "rocksdb-mingw-arm64.zip" \
+  cmake_flags "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64" \
+  requires_konan_mode never
 
 register_config \
   macosX64 \
@@ -223,7 +234,7 @@ register_config \
 
 default_configs_for_host() {
   case "$1" in
-    LINUX) echo "linuxX64 linuxArm64 mingwX64" ;;
+    LINUX) echo "linuxX64 linuxArm64 mingwX64 mingwArm64" ;;
     MAC) echo "macosX64 macosArm64 iosArm64 iosSimulatorArm64 watchosArm64 watchosDeviceArm64 watchosSimulatorArm64 tvosArm64 tvosSimulatorArm64" ;;
     *) echo "" ;;
   esac

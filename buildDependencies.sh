@@ -21,6 +21,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
+  export PATH="${LLVM_MINGW_ROOT}/bin:${PATH}"
+fi
+
 # ---------------------------------------------------------
 # Default Values
 # ---------------------------------------------------------
@@ -223,6 +227,42 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   export AR="x86_64-w64-mingw32-ar"
   export uname="mingw32"
   export CROSS_PREFIX="x86_64-w64-mingw32-"
+elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
+  TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
+  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-gcc"
+    export CXX="${TOOLCHAIN_TRIPLE}-g++"
+  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-clang"
+    if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+      export CXX="${TOOLCHAIN_TRIPLE}-clang++"
+    else
+      export CXX="${TOOLCHAIN_TRIPLE}-clang"
+    fi
+  else
+    echo "❌ Missing Windows ARM64 cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
+    echo "   Install an ARM64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
+    exit 1
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
+    export AR="${TOOLCHAIN_TRIPLE}-ar"
+  elif command -v llvm-ar >/dev/null 2>&1; then
+    export AR="llvm-ar"
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-ranlib" >/dev/null 2>&1; then
+    export RANLIB="${TOOLCHAIN_TRIPLE}-ranlib"
+  elif command -v llvm-ranlib >/dev/null 2>&1; then
+    export RANLIB="llvm-ranlib"
+  fi
+
+  export uname="mingw32"
+  if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1 || command -v "${TOOLCHAIN_TRIPLE}-ranlib" >/dev/null 2>&1; then
+    export CROSS_PREFIX="${TOOLCHAIN_TRIPLE}-"
+  else
+    export CROSS_PREFIX=""
+  fi
 fi
 set -u
 
@@ -394,7 +434,7 @@ build_snappy() {
     echo "set(CMAKE_16BIT_TYPE \"unsigned long\")" >> "${toolchain_file}"
 
     EXTRA_CMAKEFLAGS+=""" -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_TOOLCHAIN_FILE=$toolchain_file"""
-    if [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
+    if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
       EXTRA_CMAKEFLAGS+=" -DCMAKE_SYSTEM_NAME=Windows"
       EXTRA_CMAKEFLAGS+=" -DSNAPPY_IS_BIG_ENDIAN=0"
     fi
@@ -432,7 +472,7 @@ build_lz4() {
   make clean > /dev/null
 
   TARGET_OS=null
-  if [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
     # Because we use linux cross compiler, we need to set it to linux
     TARGET_OS="Linux"
   fi
