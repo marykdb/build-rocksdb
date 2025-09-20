@@ -46,7 +46,8 @@ HOST_PLATFORM="$(resolve_host)"
 HOST_ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
 
 declare -a CONFIG_IDS=()
-declare -A CONFIG_DATA=()
+declare -a CONFIG_KEYS=()
+declare -a CONFIG_VALUES=()
 
 register_config() {
   local id="$1"
@@ -55,7 +56,8 @@ register_config() {
   while [[ $# -gt 0 ]]; do
     local field="$1"
     local value="$2"
-    CONFIG_DATA["$id:$field"]="$value"
+    CONFIG_KEYS+=("$id:$field")
+    CONFIG_VALUES+=("$value")
     shift 2
   done
 }
@@ -190,20 +192,29 @@ register_config \
   cmake_flags "-DPLATFORM=TVOS -DARCHS=arm64" \
   requires_konan_mode always
 
-declare -A DEFAULT_CONFIGS_BY_HOST=(
-  [LINUX]="linuxX64 linuxArm64 mingwX64"
-  [MAC]="macosX64 macosArm64 iosArm64 iosSimulatorArm64 watchosArm64_32 watchosArm64 tvosArm64"
-)
+default_configs_for_host() {
+  case "$1" in
+    LINUX) echo "linuxX64 linuxArm64 mingwX64" ;;
+    MAC) echo "macosX64 macosArm64 iosArm64 iosSimulatorArm64 watchosArm64_32 watchosArm64 tvosArm64" ;;
+    *) echo "" ;;
+  esac
+}
 
 config_exists() {
   local config="$1"
-  [[ -n "${CONFIG_DATA["$config:host"]:-}" ]]
+  [[ -n "$(config_field "$config" host)" ]]
 }
 
 config_field() {
-  local config="$1"
-  local field="$2"
-  echo "${CONFIG_DATA["$config:$field"]:-}"
+  local search_key="$1:$2"
+  local idx
+  for idx in "${!CONFIG_KEYS[@]}"; do
+    if [[ "${CONFIG_KEYS[$idx]}" == "$search_key" ]]; then
+      echo "${CONFIG_VALUES[$idx]}"
+      return
+    fi
+  done
+  echo ""
 }
 
 list_configs() {
@@ -496,7 +507,7 @@ main() {
 
   if [[ ${#positional[@]} -eq 0 ]]; then
     local defaults
-    defaults="${DEFAULT_CONFIGS_BY_HOST[$HOST_PLATFORM]:-}"
+    defaults="$(default_configs_for_host "$HOST_PLATFORM")"
     if [[ -z "$defaults" ]]; then
       fail "No builds are defined for $HOST_PLATFORM hosts"
     fi
