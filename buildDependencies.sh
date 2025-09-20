@@ -393,18 +393,41 @@ download_and_verify() {
 build_zlib() {
   local tarball="${DOWNLOAD_DIR}/zlib-${ZLIB_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/zlib-${ZLIB_VER}"
+  local cflags="-fPIC"
+  [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
+
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
   pushd "${src_dir}" > /dev/null
-  if ! CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-       CROSS_PREFIX="${CROSS_PREFIX}" CFLAGS="${EXTRA_CFLAGS} -fPIC" ./configure --static; then
+
+  local -a configure_env=(
+    "CC=${CC:-cc}"
+    "CFLAGS=${cflags}"
+    "CROSS_PREFIX=${CROSS_PREFIX}"
+  )
+  local -a make_env=(
+    "CC=${CC:-cc}"
+  )
+
+  if [[ -n "${AR:-}" ]]; then
+    configure_env+=("AR=${AR}")
+    make_env+=("AR=${AR}")
+  fi
+  if [[ -n "${RANLIB:-}" ]]; then
+    configure_env+=("RANLIB=${RANLIB}")
+    make_env+=("RANLIB=${RANLIB}")
+  fi
+
+  if ! env "${configure_env[@]}" ./configure --static; then
     if [[ -f configure.log ]]; then
       echo "⚠️ zlib configure failed, dumping configure.log:" >&2
       cat configure.log >&2
     fi
     return 1
   fi
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" static
+
+  env "${make_env[@]}" make clean > /dev/null
+  env "${make_env[@]}" make static
+
   cp "zlib.h" "zconf.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libz.a" "${OUTPUT_DIR}/"
   popd > /dev/null
