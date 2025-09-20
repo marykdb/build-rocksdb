@@ -70,6 +70,12 @@ _android_find_ndk_root() {
     return 0
   fi
 
+  candidate=$(_android_latest_directory "$konan_dir" "target-toolchain-*-android_ndk")
+  if [[ -n "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+
   return 1
 }
 
@@ -122,13 +128,20 @@ setup_android_ndk_toolchain() {
   local bin_dir=""
   local host_tag=""
   local tag
-  for tag in $host_tags; do
-    if [[ -d "${ndk_root}/toolchains/llvm/prebuilt/${tag}/bin" ]]; then
-      bin_dir="${ndk_root}/toolchains/llvm/prebuilt/${tag}/bin"
-      host_tag="$tag"
-      break
-    fi
-  done
+  if [[ -d "${ndk_root}/toolchains/llvm/prebuilt" ]]; then
+    for tag in $host_tags; do
+      if [[ -d "${ndk_root}/toolchains/llvm/prebuilt/${tag}/bin" ]]; then
+        bin_dir="${ndk_root}/toolchains/llvm/prebuilt/${tag}/bin"
+        host_tag="$tag"
+        break
+      fi
+    done
+  fi
+
+  if [[ -z "$bin_dir" && -d "${ndk_root}/bin" ]]; then
+    bin_dir="${ndk_root}/bin"
+    host_tag="standalone"
+  fi
 
   if [[ -z "$bin_dir" ]]; then
     _android_ndk_log "Failed to locate the LLVM toolchain within the Android NDK (${ndk_root})"

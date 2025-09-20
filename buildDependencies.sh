@@ -403,8 +403,8 @@ build_zlib() {
     fi
     return 1
   fi
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" make clean > /dev/null
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" make static
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" static
   cp "zlib.h" "zconf.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libz.a" "${OUTPUT_DIR}/"
   popd > /dev/null
@@ -419,9 +419,9 @@ build_bzip2() {
   local src_dir="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}"
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
   pushd "${src_dir}" > /dev/null
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" make clean > /dev/null
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    make CFLAGS="${EXTRA_CFLAGS} -fPIC -O2 -g -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
+    CFLAGS="${EXTRA_CFLAGS} -fPIC -O2 -g -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
   cp "bzlib.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libbz2.a" "${OUTPUT_DIR}/"
   popd > /dev/null
@@ -436,9 +436,9 @@ build_zstd() {
   local src_dir="${DOWNLOAD_DIR}/zstd-${ZSTD_VER}"
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
   pushd "${src_dir}/lib" > /dev/null
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" make clean > /dev/null
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" make libzstd.a > /dev/null
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
+    CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" libzstd.a > /dev/null
   popd > /dev/null
   cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "${src_dir}/lib/libzstd.a" "${OUTPUT_DIR}/"
@@ -489,9 +489,9 @@ build_snappy() {
         -DSNAPPY_BUILD_TESTS=OFF \
         -Wno-dev ${PLATFORM_CMAKE_FLAGS} .
 
-  CC="${CC:-cc}" CXX="${CXX:-c++}" make clean > /dev/null
-  CC="${CC:-cc}" CXX="${CXX:-c++}" \
-    CXXFLAGS="${EXTRA_CXXFLAGS} -fPIC -O2" CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" make ${SNAPPY_MAKE_TARGET} > /dev/null
+  make CC="${CC:-cc}" CXX="${CXX:-c++}" clean > /dev/null
+  make CC="${CC:-cc}" CXX="${CXX:-c++}" \
+    CXXFLAGS="${EXTRA_CXXFLAGS} -fPIC -O2" CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" ${SNAPPY_MAKE_TARGET} > /dev/null
   cmake --install . --prefix "${install_prefix}" > /dev/null
   cp "snappy.h" "snappy-stubs-public.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libsnappy.a" "${OUTPUT_DIR}/"
@@ -509,7 +509,7 @@ build_lz4() {
   echo "Building LZ4 version ${LZ4_VER}..."
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" > /dev/null
   pushd "${src_dir}/lib" > /dev/null
-  CC="${CC:-cc}" make clean > /dev/null
+  make CC="${CC:-cc}" clean > /dev/null
 
   TARGET_OS=null
   if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
@@ -517,8 +517,8 @@ build_lz4() {
     TARGET_OS="Linux"
   fi
 
-  CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    TARGET_OS=$TARGET_OS CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" LDFLAGS="${EXTRA_LDFLAGS}" make liblz4.a > /dev/null
+  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
+    TARGET_OS=$TARGET_OS CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" LDFLAGS="${EXTRA_LDFLAGS}" liblz4.a > /dev/null
   cp "lz4.h" "lz4hc.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "liblz4.a" "${OUTPUT_DIR}/"
   popd > /dev/null
