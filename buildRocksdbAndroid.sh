@@ -107,13 +107,16 @@ EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_FLAGS+=" ${ANDROID_TOOLCHAIN_EXTRA_CFLAGS}"
 
 determine_jobs() {
+  local jobs=""
   if command -v nproc >/dev/null 2>&1; then
-    nproc
+    jobs="$(nproc 2>/dev/null || true)"
   elif command -v sysctl >/dev/null 2>&1; then
-    sysctl -n hw.logicalcpu 2>/dev/null || sysctl -n hw.ncpu
-  else
-    echo 4
+    jobs="$(sysctl -n hw.logicalcpu 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || true)"
   fi
+  if [[ -z "$jobs" ]]; then
+    jobs=4
+  fi
+  echo "$jobs"
 }
 
 cd "${PROJECT_ROOT}/rocksdb" || { echo "Could not enter rocksdb directory" >&2; exit 1; }
@@ -147,7 +150,9 @@ BUILD_OUTPUT=$(
     OBJ_DIR="${BUILD_DIR}" \
     EXTRA_CXXFLAGS="${EXTRA_FLAGS}" \
     EXTRA_CFLAGS="${EXTRA_FLAGS}" \
-    TARGET_OS=ANDROID \
+    MACOSX_DEPLOYMENT_TARGET= \
+    TARGET_OS=OS_ANDROID_CROSSCOMPILE \
+    PLATFORM=OS_ANDROID \
     PORTABLE=1 \
     static_lib
 )

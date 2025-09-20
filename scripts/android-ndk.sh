@@ -149,26 +149,31 @@ setup_android_ndk_toolchain() {
   fi
 
   local triple=""
+  local tool_prefix=""
   local abi=""
   local extra_flags=""
   case "$arch" in
     android_arm32|arm32|armeabi-v7a)
       triple="armv7a-linux-androideabi${api_level}"
+      tool_prefix="arm-linux-androideabi"
       abi="armeabi-v7a"
       extra_flags="-march=armv7-a -mthumb -mfpu=neon -mfloat-abi=softfp"
       ;;
     android_arm64|arm64|arm64-v8a|aarch64)
       triple="aarch64-linux-android${api_level}"
+      tool_prefix="aarch64-linux-android"
       abi="arm64-v8a"
       extra_flags="-march=armv8-a"
       ;;
     android_x86|x86|i686)
       triple="i686-linux-android${api_level}"
+      tool_prefix="i686-linux-android"
       abi="x86"
       extra_flags="-march=i686 -msse3 -mstackrealign -mfpmath=sse"
       ;;
     android_x64|android_x86_64|x64|x86_64)
       triple="x86_64-linux-android${api_level}"
+      tool_prefix="x86_64-linux-android"
       abi="x86_64"
       extra_flags="-march=x86-64 -msse4.2 -mpopcnt"
       ;;
@@ -184,6 +189,25 @@ setup_android_ndk_toolchain() {
   local ar="${bin_dir}/llvm-ar"
   local ranlib="${bin_dir}/llvm-ranlib"
   local strip="${bin_dir}/llvm-strip"
+
+  if [[ ! -x "$ar" ]]; then
+    local arch_ar="${bin_dir}/${tool_prefix}-ar"
+    if [[ -x "$arch_ar" ]]; then
+      ar="$arch_ar"
+    fi
+  fi
+  if [[ ! -x "$ranlib" ]]; then
+    local arch_ranlib="${bin_dir}/${tool_prefix}-ranlib"
+    if [[ -x "$arch_ranlib" ]]; then
+      ranlib="$arch_ranlib"
+    fi
+  fi
+  if [[ ! -x "$strip" ]]; then
+    local arch_strip="${bin_dir}/${tool_prefix}-strip"
+    if [[ -x "$arch_strip" ]]; then
+      strip="$arch_strip"
+    fi
+  fi
 
   if [[ ! -x "$cc" || ! -x "$cxx" ]]; then
     _android_ndk_log "Android NDK toolchain binaries not found for ${arch} (expected ${cc})"
@@ -211,17 +235,28 @@ setup_android_ndk_toolchain() {
   export ANDROID_TOOLCHAIN_EXTRA_CFLAGS="$combined_flags"
   export ANDROID_TOOLCHAIN_EXTRA_CXXFLAGS="$combined_flags"
 
-  local cmake_flags="-DANDROID=1 -DCMAKE_SYSTEM_NAME=Android -DANDROID_PLATFORM=android-${api_level}"
-  cmake_flags+=" -DANDROID_ABI=${abi}"
-  cmake_flags+=" -DANDROID_NDK=${ndk_root}"
-  export ANDROID_TOOLCHAIN_CMAKE_FLAGS="$cmake_flags"
-
+  local cmake_flags=""
   local toolchain_file="${ndk_root}/build/cmake/android.toolchain.cmake"
   if [[ -f "$toolchain_file" ]]; then
+    cmake_flags="-DANDROID=1 -DCMAKE_SYSTEM_NAME=Android -DANDROID_PLATFORM=android-${api_level}"
+    cmake_flags+=" -DANDROID_ABI=${abi}"
+    cmake_flags+=" -DANDROID_NDK=${ndk_root}"
     export ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE="$toolchain_file"
   else
     export ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE=""
+    if [[ -d "${ndk_root}/platforms" ]]; then
+      cmake_flags="-DANDROID=1 -DCMAKE_SYSTEM_NAME=Android -DANDROID_PLATFORM=android-${api_level}"
+      cmake_flags+=" -DANDROID_ABI=${abi}"
+      cmake_flags+=" -DANDROID_NDK=${ndk_root}"
+    else
+      local sysroot="${ndk_root}/sysroot"
+      cmake_flags="-DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSROOT=${sysroot}"
+      cmake_flags+=" -DCMAKE_C_COMPILER_TARGET=${triple}"
+      cmake_flags+=" -DCMAKE_CXX_COMPILER_TARGET=${triple}"
+      cmake_flags+=" -DANDROID=1 -DANDROID_ABI=${abi}"
+    fi
   fi
+  export ANDROID_TOOLCHAIN_CMAKE_FLAGS="$cmake_flags"
 
   return 0
 }

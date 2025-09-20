@@ -369,20 +369,26 @@ download_and_verify() {
     tarball="${name}-${version}.tar.gz"
   fi
   local target_path="${DOWNLOAD_DIR}/${name}-${version}.tar.gz"
+  local vendor_path="${SCRIPT_DIR}/lib/${name}-${version}.tar.gz"
 
-  echo "Downloading ${name}-${version}..."
-  if curl --silent --fail --location -o "${target_path}" "${url_base}/${tarball}"; then
-    echo "Verifying ${name}-${version}..."
-    local sha256_actual
-    sha256_actual="$(shasum -a 256 "${target_path}" | awk '{print $1}')"
-    if [[ "${sha256}" != "${sha256_actual}" ]]; then
-      echo "Error: ${tarball} checksum mismatch!" >&2
-      echo "  expected: ${sha256}" >&2
-      echo "  actual:   ${sha256_actual}" >&2
+  if [[ -f "$vendor_path" ]]; then
+    echo "Using vendored ${name}-${version} from ${vendor_path}";
+    cp "$vendor_path" "$target_path"
+  else
+    echo "Downloading ${name}-${version}..."
+    if ! curl --silent --fail --location -o "${target_path}" "${url_base}/${tarball}"; then
+      echo "Error downloading ${name}-${version}!" >&2
       exit 1
     fi
-  else
-    echo "Error downloading ${name}-${version}!" >&2
+  fi
+
+  echo "Verifying ${name}-${version}..."
+  local sha256_actual
+  sha256_actual="$(shasum -a 256 "${target_path}" | awk '{print $1}')"
+  if [[ "${sha256}" != "${sha256_actual}" ]]; then
+    echo "Error: ${tarball} checksum mismatch!" >&2
+    echo "  expected: ${sha256}" >&2
+    echo "  actual:   ${sha256_actual}" >&2
     exit 1
   fi
 }
@@ -404,17 +410,17 @@ build_zlib() {
     "CFLAGS=${cflags}"
     "CROSS_PREFIX=${CROSS_PREFIX}"
   )
-  local -a make_env=(
-    "CC=${CC:-cc}"
-  )
+  local -a make_args=("CC=${CC:-cc}")
 
   if [[ -n "${AR:-}" ]]; then
     configure_env+=("AR=${AR}")
-    make_env+=("AR=${AR}")
+    make_args+=("AR=${AR}")
+    make_args+=("ARFLAGS=rcs")
+    configure_env+=("ARFLAGS=rcs")
   fi
   if [[ -n "${RANLIB:-}" ]]; then
     configure_env+=("RANLIB=${RANLIB}")
-    make_env+=("RANLIB=${RANLIB}")
+    make_args+=("RANLIB=${RANLIB}")
   fi
 
   if ! env "${configure_env[@]}" ./configure --static; then
@@ -425,8 +431,8 @@ build_zlib() {
     return 1
   fi
 
-  env "${make_env[@]}" make clean > /dev/null
-  env "${make_env[@]}" make static
+  make "${make_args[@]}" clean > /dev/null
+  make "${make_args[@]}" static
 
   cp "zlib.h" "zconf.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libz.a" "${OUTPUT_DIR}/"
