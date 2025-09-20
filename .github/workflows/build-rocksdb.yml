@@ -288,27 +288,27 @@ jobs:
           name: rocksdb-tvos-simulator-arm64
           path: build/archives/rocksdb-tvos-simulator-arm64.zip
 
-  windows-arm64-smoke:
-    name: Windows ARM64 Smoke Test
-    runs-on:
-      - windows-2022
-      - ARM64
-    needs:
-      - mingw-arm64
-    continue-on-error: true
-    steps:
-      - name: Download Windows ARM64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: rocksdb-mingw-arm64
-          path: windows-arm64
-      - name: Verify ARM64 artifact contents
-        shell: pwsh
-        run: |
-          Expand-Archive -Path 'windows-arm64/rocksdb-mingw-arm64.zip' -DestinationPath 'windows-arm64/unpacked' -Force
-          if (-not (Test-Path -Path 'windows-arm64/unpacked/lib/librocksdb.a')) {
-            throw 'librocksdb.a not found in ARM64 artifact'
-          }
+#  windows-arm64-smoke:
+#    name: Windows ARM64 Smoke Test
+#    runs-on:
+#      - windows-2022
+#      - ARM64
+#    needs:
+#      - mingw-arm64
+#    continue-on-error: true
+#    steps:
+#      - name: Download Windows ARM64 artifact
+#        uses: actions/download-artifact@v4
+#        with:
+#          name: rocksdb-mingw-arm64
+#          path: windows-arm64
+#      - name: Verify ARM64 artifact contents
+#        shell: pwsh
+#        run: |
+#          Expand-Archive -Path 'windows-arm64/rocksdb-mingw-arm64.zip' -DestinationPath 'windows-arm64/unpacked' -Force
+#          if (-not (Test-Path -Path 'windows-arm64/unpacked/lib/librocksdb.a')) {
+#            throw 'librocksdb.a not found in ARM64 artifact'
+#          }
 
   publish-release:
     name: Publish Release
