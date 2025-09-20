@@ -52,6 +52,8 @@ fun resolveSdkPath(sdk: String): String = if (!isMacOs) {
 
 val iphoneOsSdk by lazy { resolveSdkPath("iphoneos") }
 val iphoneSimulatorSdk by lazy { resolveSdkPath("iphonesimulator") }
+val watchOsSdk by lazy { resolveSdkPath("watchos") }
+val tvOsSdk by lazy { resolveSdkPath("appletvos") }
 
 val buildConfigs = listOf(
     RocksdbBuildConfig(
@@ -122,6 +124,32 @@ val buildConfigs = listOf(
         buildScript = "buildRocksdbApple.sh",
         buildArguments = listOf("--platform=ios", "--simulator", "--arch=arm64"),
         artifactFileName = "rocksdb-ios-simulator-arm64.zip",
+        host = HostPlatform.MAC
+    ),
+    RocksdbBuildConfig(
+        id = "watchosArm64",
+        konanTarget = "watchos_arm64",
+        outputDirectoryName = "watchos_arm64_32",
+        extraCFlags = {
+            if (isMacOs) "-arch arm64_32 -target arm64_32-apple-watchos7.0 -isysroot $watchOsSdk" else ""
+        },
+        extraCMakeFlags = { "-DPLATFORM=WATCHOS -DARCHS=arm64_32" },
+        buildScript = "buildRocksdbApple.sh",
+        buildArguments = listOf("--platform=watchos", "--arch=arm64_32"),
+        artifactFileName = "rocksdb-watchos-arm64.zip",
+        host = HostPlatform.MAC
+    ),
+    RocksdbBuildConfig(
+        id = "tvosArm64",
+        konanTarget = "tvos_arm64",
+        outputDirectoryName = "tvos_arm64",
+        extraCFlags = {
+            if (isMacOs) "-arch arm64 -target arm64-apple-tvos13.0 -isysroot $tvOsSdk" else ""
+        },
+        extraCMakeFlags = { "-DPLATFORM=TVOS -DARCHS=arm64" },
+        buildScript = "buildRocksdbApple.sh",
+        buildArguments = listOf("--platform=tvos", "--arch=arm64"),
+        artifactFileName = "rocksdb-tvos-arm64.zip",
         host = HostPlatform.MAC
     ),
     RocksdbBuildConfig(

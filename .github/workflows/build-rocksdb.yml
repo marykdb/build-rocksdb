@@ -86,31 +86,31 @@ jobs:
         with:
           name: rocksdb-mingw-x86_64
           path: build/archives/rocksdb-mingw-x86_64.zip
-#
-#  macos-x64:
-#    name: macOS x86_64
-#    runs-on: macos-13
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          submodules: true
-#      - uses: actions/setup-java@v4
-#        with:
-#          distribution: temurin
-#          java-version: '21'
-#      - name: Make Gradle executable
-#        run: chmod +x gradlew
-#      - uses: gradle/actions/setup-gradle@v3
-#      - name: Build macOS x86_64 package
-#        run: ./gradlew packageMacosX64
-#      - uses: actions/upload-artifact@v4
-#        with:
-#          name: rocksdb-macos-x86_64
-#          path: build/archives/rocksdb-macos-x86_64.zip
-#
+
+  macos-x64:
+    name: macOS x86_64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Build macOS x86_64 package
+        run: ./gradlew packageMacosX64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-macos-x86_64
+          path: build/archives/rocksdb-macos-x86_64.zip
+
   macos-arm64:
     name: macOS ARM64
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -129,47 +129,89 @@ jobs:
           name: rocksdb-macos-arm64
           path: build/archives/rocksdb-macos-arm64.zip
 
-#  ios-arm64:
-#    name: iOS ARM64
-#    runs-on: macos-14
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          submodules: true
-#      - uses: actions/setup-java@v4
-#        with:
-#          distribution: temurin
-#          java-version: '21'
-#      - name: Make Gradle executable
-#        run: chmod +x gradlew
-#      - uses: gradle/actions/setup-gradle@v3
-#      - name: Build iOS ARM64 package
-#        run: ./gradlew packageIosArm64
-#      - uses: actions/upload-artifact@v4
-#        with:
-#          name: rocksdb-ios-arm64
-#          path: build/archives/rocksdb-ios-arm64.zip
+  ios-arm64:
+    name: iOS ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Build iOS ARM64 package
+        run: ./gradlew packageIosArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-ios-arm64
+          path: build/archives/rocksdb-ios-arm64.zip
 
-#  ios-simulator-arm64:
-#    name: iOS Simulator ARM64
-#    runs-on: macos-14
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          submodules: true
-#      - uses: actions/setup-java@v4
-#        with:
-#          distribution: temurin
-#          java-version: '21'
-#      - name: Make Gradle executable
-#        run: chmod +x gradlew
-#      - uses: gradle/actions/setup-gradle@v3
-#      - name: Build iOS Simulator ARM64 package
-#        run: ./gradlew packageIosSimulatorArm64
-#      - uses: actions/upload-artifact@v4
-#        with:
-#          name: rocksdb-ios-simulator-arm64
-#          path: build/archives/rocksdb-ios-simulator-arm64.zip
+  ios-simulator-arm64:
+    name: iOS Simulator ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Build iOS Simulator ARM64 package
+        run: ./gradlew packageIosSimulatorArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-ios-simulator-arm64
+          path: build/archives/rocksdb-ios-simulator-arm64.zip
+
+  watchos-arm64:
+    name: watchOS ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Build watchOS ARM64 package
+        run: ./gradlew packageWatchosArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-watchos-arm64
+          path: build/archives/rocksdb-watchos-arm64.zip
+
+  tvos-arm64:
+    name: tvOS ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Make Gradle executable
+        run: chmod +x gradlew
+      - uses: gradle/actions/setup-gradle@v3
+      - name: Build tvOS ARM64 package
+        run: ./gradlew packageTvosArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-tvos-arm64
+          path: build/archives/rocksdb-tvos-arm64.zip
 
   publish-release:
     name: Publish Release
@@ -177,10 +219,12 @@ jobs:
       - linux-x64
       - linux-arm64
       - mingw-x64
-#      - macos-x64
+      - macos-x64
       - macos-arm64
-#      - ios-arm64
-#      - ios-simulator-arm64
+      - ios-arm64
+      - ios-simulator-arm64
+      - watchos-arm64
+      - tvos-arm64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
