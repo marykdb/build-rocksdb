@@ -8,13 +8,11 @@
 #   ./build_rocksdb.sh --platform=ios --simulator --arch=arm64
 #   ./build_rocksdb.sh --platform=macos --arch=arm64
 #   ./build_rocksdb.sh --platform=macos --arch=x86_64
-#
-#   Not supported yet because watchos needs arm64_32 which is not supported by the dependencies
+#   ./build_rocksdb.sh --platform=watchos --arch=arm64_32
 #   ./build_rocksdb.sh --platform=watchos --arch=arm64
-#   ./build_rocksdb.sh --platform=watchos --simulator --arch=x86_64
-#   Not supported because tvOS limits certain calls which are needed for RocksDB
+#   ./build_rocksdb.sh --platform=watchos --simulator --arch=arm64
 #   ./build_rocksdb.sh --platform=tvos --arch=arm64
-#   ./build_rocksdb.sh --platform=tvos --simulator --arch=x86_64
+#   ./build_rocksdb.sh --platform=tvos --simulator --arch=arm64
 #
 
 set -e  # Exit immediately if any command fails.

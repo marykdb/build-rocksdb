@@ -120,18 +120,46 @@ jobs:
           path: build/archives/rocksdb-ios-simulator-arm64.zip
 
   watchos-arm64:
-    name: watchOS ARM64
+    name: watchOS arm64_32
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Build watchOS ARM64 package
+      - name: Build watchOS arm64_32 package
         run: ./build.sh watchosArm64
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-watchos-arm64
           path: build/archives/rocksdb-watchos-arm64.zip
+
+  watchos-device-arm64:
+    name: watchOS Device ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build watchOS Device ARM64 package
+        run: ./build.sh watchosDeviceArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-watchos-device-arm64
+          path: build/archives/rocksdb-watchos-device-arm64.zip
+
+  watchos-simulator-arm64:
+    name: watchOS Simulator ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build watchOS Simulator ARM64 package
+        run: ./build.sh watchosSimulatorArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-watchos-simulator-arm64
+          path: build/archives/rocksdb-watchos-simulator-arm64.zip
 
   tvos-arm64:
     name: tvOS ARM64
@@ -147,6 +175,20 @@ jobs:
           name: rocksdb-tvos-arm64
           path: build/archives/rocksdb-tvos-arm64.zip
 
+  tvos-simulator-arm64:
+    name: tvOS Simulator ARM64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build tvOS Simulator ARM64 package
+        run: ./build.sh tvosSimulatorArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-tvos-simulator-arm64
+          path: build/archives/rocksdb-tvos-simulator-arm64.zip
+
   publish-release:
     name: Publish Release
     needs:
@@ -158,7 +200,10 @@ jobs:
       - ios-arm64
       - ios-simulator-arm64
       - watchos-arm64
+      - watchos-device-arm64
+      - watchos-simulator-arm64
       - tvos-arm64
+      - tvos-simulator-arm64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

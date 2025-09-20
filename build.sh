@@ -22,7 +22,8 @@ Options:
 Configs:
   linuxX64, linuxArm64, mingwX64,
   macosX64, macosArm64, iosArm64, iosSimulatorArm64,
-  watchosArm64_32, watchosArm64, tvosArm64
+  watchosArm64, watchosDeviceArm64, watchosSimulatorArm64,
+  tvosArm64, tvosSimulatorArm64
 USAGE
 }
 
@@ -151,13 +152,13 @@ register_config \
   requires_konan_mode always
 
 register_config \
-  watchosArm64_32 \
+  watchosArm64 \
   host MAC \
-  konan_target watchos_arm64_32 \
+  konan_target watchos_arm64 \
   output_dir watchos_arm64_32 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=watchos --arch=arm64_32" \
-  artifact "rocksdb-watchos-arm64_32.zip" \
+  artifact "rocksdb-watchos-arm64.zip" \
   apple_arch arm64_32 \
   apple_target "arm64_32-apple-watchos7.0" \
   apple_sdk watchos \
@@ -165,17 +166,31 @@ register_config \
   requires_konan_mode always
 
 register_config \
-  watchosArm64 \
+  watchosDeviceArm64 \
   host MAC \
-  konan_target watchos_arm64 \
+  konan_target watchos_device_arm64 \
   output_dir watchos_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=watchos --arch=arm64" \
-  artifact "rocksdb-watchos-arm64.zip" \
+  artifact "rocksdb-watchos-device-arm64.zip" \
   apple_arch arm64 \
   apple_target "arm64-apple-watchos7.0" \
   apple_sdk watchos \
   cmake_flags "-DPLATFORM=WATCHOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=7.0" \
+  requires_konan_mode always
+
+register_config \
+  watchosSimulatorArm64 \
+  host MAC \
+  konan_target watchos_simulator_arm64 \
+  output_dir watchos_simulator_arm64 \
+  build_script buildRocksdbApple.sh \
+  build_args "--platform=watchos --simulator --arch=arm64" \
+  artifact "rocksdb-watchos-simulator-arm64.zip" \
+  apple_arch arm64 \
+  apple_target "arm64-apple-watchos7.0-simulator" \
+  apple_sdk watchsimulator \
+  cmake_flags "-DPLATFORM=SIMULATORARM64_WATCHOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=7.0" \
   requires_konan_mode always
 
 register_config \
@@ -189,13 +204,27 @@ register_config \
   apple_arch arm64 \
   apple_target "arm64-apple-tvos13.0" \
   apple_sdk appletvos \
-  cmake_flags "-DPLATFORM=TVOS -DARCHS=arm64" \
+  cmake_flags "-DPLATFORM=TVOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=13.0" \
+  requires_konan_mode always
+
+register_config \
+  tvosSimulatorArm64 \
+  host MAC \
+  konan_target tvos_simulator_arm64 \
+  output_dir tvos_simulator_arm64 \
+  build_script buildRocksdbApple.sh \
+  build_args "--platform=tvos --simulator --arch=arm64" \
+  artifact "rocksdb-tvos-simulator-arm64.zip" \
+  apple_arch arm64 \
+  apple_target "arm64-apple-tvos13.0-simulator" \
+  apple_sdk appletvsimulator \
+  cmake_flags "-DPLATFORM=SIMULATORARM64_TVOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=13.0" \
   requires_konan_mode always
 
 default_configs_for_host() {
   case "$1" in
     LINUX) echo "linuxX64 linuxArm64 mingwX64" ;;
-    MAC) echo "macosX64 macosArm64 iosArm64 iosSimulatorArm64 watchosArm64_32 watchosArm64 tvosArm64" ;;
+    MAC) echo "macosX64 macosArm64 iosArm64 iosSimulatorArm64 watchosArm64 watchosDeviceArm64 watchosSimulatorArm64 tvosArm64 tvosSimulatorArm64" ;;
     *) echo "" ;;
   esac
 }
@@ -265,7 +294,9 @@ resolve_sdk_path() {
     iphoneos) xcrun --sdk iphoneos --show-sdk-path ;;
     iphonesimulator) xcrun --sdk iphonesimulator --show-sdk-path ;;
     watchos) xcrun --sdk watchos --show-sdk-path ;;
+    watchsimulator) xcrun --sdk watchsimulator --show-sdk-path ;;
     appletvos) xcrun --sdk appletvos --show-sdk-path ;;
+    appletvsimulator) xcrun --sdk appletvsimulator --show-sdk-path ;;
     "") echo "" ;;
     *) fail "Unknown SDK: $sdk" ;;
   esac
