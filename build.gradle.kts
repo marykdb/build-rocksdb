@@ -127,15 +127,28 @@ val buildConfigs = listOf(
         host = HostPlatform.MAC
     ),
     RocksdbBuildConfig(
-        id = "watchosArm64",
-        konanTarget = "watchos_arm64",
+        id = "watchosArm64_32",
+        konanTarget = "watchos_arm64_32",
         outputDirectoryName = "watchos_arm64_32",
         extraCFlags = {
             if (isMacOs) "-arch arm64_32 -target arm64_32-apple-watchos7.0 -isysroot $watchOsSdk" else ""
         },
-        extraCMakeFlags = { "-DPLATFORM=WATCHOS -DARCHS=arm64_32" },
+        extraCMakeFlags = { "-DPLATFORM=WATCHOS -DARCHS=arm64_32 -DDEPLOYMENT_TARGET=7.0" },
         buildScript = "buildRocksdbApple.sh",
         buildArguments = listOf("--platform=watchos", "--arch=arm64_32"),
+        artifactFileName = "rocksdb-watchos-arm64_32.zip",
+        host = HostPlatform.MAC
+    ),
+    RocksdbBuildConfig(
+        id = "watchosArm64",
+        konanTarget = "watchos_arm64",
+        outputDirectoryName = "watchos_arm64",
+        extraCFlags = {
+            if (isMacOs) "-arch arm64 -target arm64-apple-watchos7.0 -isysroot $watchOsSdk" else ""
+        },
+        extraCMakeFlags = { "-DPLATFORM=WATCHOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=7.0" },
+        buildScript = "buildRocksdbApple.sh",
+        buildArguments = listOf("--platform=watchos", "--arch=arm64"),
         artifactFileName = "rocksdb-watchos-arm64.zip",
         host = HostPlatform.MAC
     ),
