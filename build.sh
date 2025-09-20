@@ -23,7 +23,8 @@ Configs:
   linuxX64, linuxArm64, mingwX64, mingwArm64,
   macosX64, macosArm64, iosArm64, iosSimulatorArm64,
   watchosArm64, watchosDeviceArm64, watchosSimulatorArm64,
-  tvosArm64, tvosSimulatorArm64
+  tvosArm64, tvosSimulatorArm64,  androidNativeArm32, androidNativeArm64,
+  androidNativeX86, androidNativeX64
 USAGE
 }
 
@@ -232,6 +233,46 @@ register_config \
   cmake_flags "-DPLATFORM=SIMULATORARM64_TVOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=13.0" \
   requires_konan_mode always
 
+register_config \
+  androidNativeArm32 \
+  host "LINUX|MAC" \
+  konan_target android_arm32 \
+  output_dir android_arm32 \
+  build_script buildRocksdbAndroid.sh \
+  build_args "--arch=arm32" \
+  artifact "rocksdb-android-arm32.zip" \
+  requires_konan_mode always
+
+register_config \
+  androidNativeArm64 \
+  host "LINUX|MAC" \
+  konan_target android_arm64 \
+  output_dir android_arm64 \
+  build_script buildRocksdbAndroid.sh \
+  build_args "--arch=arm64" \
+  artifact "rocksdb-android-arm64.zip" \
+  requires_konan_mode always
+
+register_config \
+  androidNativeX86 \
+  host "LINUX|MAC" \
+  konan_target android_x86 \
+  output_dir android_x86 \
+  build_script buildRocksdbAndroid.sh \
+  build_args "--arch=x86" \
+  artifact "rocksdb-android-x86.zip" \
+  requires_konan_mode always
+
+register_config \
+  androidNativeX64 \
+  host "LINUX|MAC" \
+  konan_target android_x64 \
+  output_dir android_x64 \
+  build_script buildRocksdbAndroid.sh \
+  build_args "--arch=x64" \
+  artifact "rocksdb-android-x64.zip" \
+  requires_konan_mode always
+
 default_configs_for_host() {
   case "$1" in
     LINUX) echo "linuxX64 linuxArm64 mingwX64 mingwArm64" ;;
@@ -255,6 +296,33 @@ config_field() {
     fi
   done
   echo ""
+}
+
+config_hosts_field() {
+  config_field "$1" host
+}
+
+config_supports_host() {
+  local config="$1"
+  local host="$2"
+  local field
+  field="$(config_hosts_field "$config")"
+  if [[ -z "$field" ]]; then
+    echo "false"
+    return
+  fi
+  if [[ "$field" == "ANY" ]]; then
+    echo "true"
+    return
+  fi
+  IFS='|' read -r -a allowed <<< "$field"
+  for value in "${allowed[@]}"; do
+    if [[ "$value" == "$host" ]]; then
+      echo "true"
+      return
+    fi
+  done
+  echo "false"
 }
 
 list_configs() {
@@ -361,7 +429,7 @@ requires_konan() {
       echo "true"
       ;;
     auto)
-      if [[ "$HOST_PLATFORM" != "$(config_host "$config")" ]]; then
+      if [[ "$(config_supports_host "$config" "$HOST_PLATFORM")" != "true" ]]; then
         echo "true"
         return
       fi
@@ -504,7 +572,7 @@ build_config() {
   echo "Building configuration: $config"
   echo "=============================="
 
-  if [[ "$HOST_PLATFORM" != "$(config_host "$config")" ]]; then
+  if [[ "$(config_supports_host "$config" "$HOST_PLATFORM")" != "true" ]]; then
     fail "Skipping $config because it requires host $(config_host "$config")"
   fi
 

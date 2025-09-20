@@ -117,6 +117,9 @@ case "$TARGET" in
   mingw_x64)
     pattern="mingw-w64-x86_64-*"
     ;;
+  android_arm32|android_arm64|android_x86|android_x64)
+    pattern="android-ndk-*"
+    ;;
   *)
     pattern=""
     ;;

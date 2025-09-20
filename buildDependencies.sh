@@ -25,6 +25,9 @@ if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
   export PATH="${LLVM_MINGW_ROOT}/bin:${PATH}"
 fi
 
+# shellcheck source=./scripts/android-ndk.sh
+source "${SCRIPT_DIR}/scripts/android-ndk.sh"
+
 # ---------------------------------------------------------
 # Default Values
 # ---------------------------------------------------------
@@ -75,6 +78,15 @@ SNAPPY_MAKE_TARGET="${SNAPPY_MAKE_TARGET:-}"
 # CROSS_PREFIX is only set for mingw builds but is referenced unconditionally.
 # Provide an empty default to avoid "unbound variable" errors under `set -u`.
 CROSS_PREFIX="${CROSS_PREFIX:-}"
+
+apply_android_toolchain_flags() {
+  EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }${ANDROID_TOOLCHAIN_EXTRA_CFLAGS}"
+  EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }${ANDROID_TOOLCHAIN_EXTRA_CXXFLAGS}"
+  PLATFORM_CMAKE_FLAGS="${PLATFORM_CMAKE_FLAGS:+${PLATFORM_CMAKE_FLAGS} }${ANDROID_TOOLCHAIN_CMAKE_FLAGS}"
+  if [[ -n "${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE}" ]]; then
+    TOOLCHAIN_FILE="${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE}"
+  fi
+}
 
 DEFAULT_OUTPUT_DIR="$(pwd)"
 
@@ -213,6 +225,30 @@ elif [[ "$OUTPUT_DIR" == *linux_arm64* ]]; then
       exit 1
     fi
   fi
+elif [[ "$OUTPUT_DIR" == *android_arm32* ]]; then
+  if ! setup_android_ndk_toolchain "android_arm32"; then
+    echo "❌ Failed to configure Android NDK toolchain for arm32" >&2
+    exit 1
+  fi
+  apply_android_toolchain_flags
+elif [[ "$OUTPUT_DIR" == *android_arm64* ]]; then
+  if ! setup_android_ndk_toolchain "android_arm64"; then
+    echo "❌ Failed to configure Android NDK toolchain for arm64" >&2
+    exit 1
+  fi
+  apply_android_toolchain_flags
+elif [[ "$OUTPUT_DIR" == *android_x86* ]]; then
+  if ! setup_android_ndk_toolchain "android_x86"; then
+    echo "❌ Failed to configure Android NDK toolchain for x86" >&2
+    exit 1
+  fi
+  apply_android_toolchain_flags
+elif [[ "$OUTPUT_DIR" == *android_x64* ]]; then
+  if ! setup_android_ndk_toolchain "android_x64"; then
+    echo "❌ Failed to configure Android NDK toolchain for x86_64" >&2
+    exit 1
+  fi
+  apply_android_toolchain_flags
 elif [[ "$OUTPUT_DIR" == *macos_x86_64* ]]; then
   export CC="clang"
   export CXX="clang++"

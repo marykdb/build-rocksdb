@@ -45,6 +45,78 @@ jobs:
           name: rocksdb-linux-arm64
           path: build/archives/rocksdb-linux-arm64.zip
 
+  android-arm32:
+    name: Android ARM32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
+      - name: Build Android ARM32 package
+        run: ./build.sh androidNativeArm32
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-android-arm32
+          path: build/archives/rocksdb-android-arm32.zip
+
+  android-arm64:
+    name: Android ARM64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
+      - name: Build Android ARM64 package
+        run: ./build.sh androidNativeArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-android-arm64
+          path: build/archives/rocksdb-android-arm64.zip
+
+  android-x86:
+    name: Android x86
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
+      - name: Build Android x86 package
+        run: ./build.sh androidNativeX86
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-android-x86
+          path: build/archives/rocksdb-android-x86.zip
+
+  android-x64:
+    name: Android x86_64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
+      - name: Build Android x86_64 package
+        run: ./build.sh androidNativeX64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-android-x64
+          path: build/archives/rocksdb-android-x64.zip
+
   mingw-x64:
     name: Windows (MinGW) x86_64
     runs-on: ubuntu-latest
@@ -254,6 +326,10 @@ jobs:
       - watchos-simulator-arm64
       - tvos-arm64
       - tvos-simulator-arm64
+      - android-arm32
+      - android-arm64
+      - android-x86
+      - android-x64
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
