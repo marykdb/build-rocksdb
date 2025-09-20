@@ -26,14 +26,14 @@ case "$ARCH" in
     CXX="x86_64-w64-mingw32-g++"
     CMAKE_TOOLCHAIN_FLAGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64"
     EXTRA_FLAGS="-march=x86-64"
-    OBJ_DIR="rocksdb/build/mingw_x86_64"
+    OBJ_DIR="build/lib/mingw_x86_64"
     ;;
   i686)
     CC="i686-w64-mingw32-gcc"
     CXX="i686-w64-mingw32-g++"
     CMAKE_TOOLCHAIN_FLAGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=i686"
     EXTRA_FLAGS="-march=i686"
-    OBJ_DIR="rocksdb/build/mingw_i686"
+    OBJ_DIR="build/lib/mingw_i686"
     ;;
   *)
     echo "Unsupported ARCH: $ARCH"
@@ -70,6 +70,11 @@ fi
 # Check if the output library already exists
 if [ -f "${OBJ_DIR}/librocksdb.a" ]; then
   echo "** BUILD SKIPPED: ${OBJ_DIR}/librocksdb.a already exists **"
+  exit 0
+fi
+
+if [ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]; then
+  echo "** BUILD SKIPPED: ${OBJ_DIR}/rocksdb-build/librocksdb.a already exists **"
   exit 0
 fi
 

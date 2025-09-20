@@ -118,7 +118,7 @@ fi
 ###############################################################################
 SIM_SUFFIX=$([[ "$SIMULATOR" == true ]] && echo "_simulator" || echo "")
 
-BUILD_DIR="build/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
+BUILD_DIR="../build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
 
 ###############################################################################
 # Common compiler & linker flags
@@ -127,7 +127,7 @@ EXTRA_FLAGS=""
 EXTRA_FLAGS+=" $MIN_FLAG"
 EXTRA_FLAGS+=" $TARGET_TRIPLE"
 EXTRA_FLAGS+=" -isysroot $SDK_PATH"
-EXTRA_FLAGS+=" -I../lib/include"
+EXTRA_FLAGS+=" -I../build/include -I../build/include/dependencies"
 EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 
 LD_FLAGS="-lbz2 -lz -lz4 -lsnappy"
@@ -136,6 +136,8 @@ LD_FLAGS="-lbz2 -lz -lz4 -lsnappy"
 # Move into rocksdb directory
 ###############################################################################
 cd "rocksdb" || { echo "Could not enter rocksdb directory"; exit 1; }
+
+mkdir -p "$BUILD_DIR"
 
 ###############################################################################
 # Function to check the build output

@@ -1,4 +1,5 @@
 import java.util.Locale
+import org.gradle.api.tasks.Copy
 import org.gradle.api.tasks.Exec
 import org.gradle.api.tasks.bundling.Zip
 
@@ -147,6 +148,16 @@ buildConfigs.forEach { config ->
         config.id == "linuxArm64" -> !isHostArmArch()
         else -> true
     }
+    val prepareHeadersTask = tasks.register<Copy>("prepareHeaders$taskSuffix") {
+        group = "build"
+        description = "Copy RocksDB headers into build/include for ${config.id}"
+        onlyIf { currentHost == config.host }
+        from(project.file("rocksdb/include"))
+        into(project.file("build/include/rocksdb"))
+        doFirst {
+            project.delete(project.file("build/include/rocksdb"))
+        }
+    }
     val prepareKonan = tasks.register("prepareKonan$taskSuffix", Exec::class) {
         group = "konan"
         description = "Download the Kotlin/Native toolchain for ${config.konanTarget}"
@@ -171,7 +182,7 @@ buildConfigs.forEach { config ->
                 "--extra-cflags",
                 config.extraCFlags(),
                 "--output-dir",
-                project.file("rocksdb/build/${config.outputDirectoryName}").absolutePath,
+                project.file("build/lib/${config.outputDirectoryName}").absolutePath,
                 "--extra-cmakeflags",
                 config.extraCMakeFlags()
             )
@@ -199,19 +210,17 @@ buildConfigs.forEach { config ->
         description = "Package RocksDB binaries for ${config.id}"
         onlyIf { currentHost == config.host }
         dependsOn(buildTask)
+        dependsOn(prepareHeadersTask)
         archiveFileName.set(config.artifactFileName)
         destinationDirectory.set(layout.buildDirectory.dir("archives"))
         isPreserveFileTimestamps = false
         isReproducibleFileOrder = true
 
-        from(project.file("rocksdb/include")) {
-            into("include/rocksdb")
+        from(project.file("build/include")) {
+            include("**/*.h", "**/*.hh", "**/*.hpp", "**/*.hxx", "**/*.inc", "**/*.ipp")
+            into("include")
         }
-        from(project.file("lib/include")) {
-            include("**/*.h")
-            into("include/dependencies")
-        }
-        from(project.file("rocksdb/build/${config.outputDirectoryName}")) {
+        from(project.file("build/lib/${config.outputDirectoryName}")) {
             include("**/*.a", "**/*.lib")
             into("lib")
         }
