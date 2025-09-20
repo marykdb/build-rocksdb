@@ -28,9 +28,9 @@ cd "rocksdb" || { echo "Failed to navigate to rocksdb"; exit 1; }
 # Simple function to check build output
 check_build() {
   local output="$1"
-  local folder="$2"
+  local output_dir="$2"
 
-  if echo "$output" | grep -q "AR       build/$folder/librocksdb.a"; then
+  if echo "$output" | grep -q "AR       ${output_dir}/librocksdb.a"; then
       echo "** BUILD SUCCEEDED for $ARCH **"
   elif echo "$output" | grep -q "make: Nothing to be done for 'static_lib'."; then
       echo "** BUILD NOT NEEDED for $ARCH (Already up to date) **"
@@ -41,7 +41,7 @@ check_build() {
   fi
 }
 
-EXTRA_FLAGS="-I../lib/include -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD "
+EXTRA_FLAGS="-I../build/include -I../build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD "
 HOST_OS="$(uname -s)"
 ar_bin=""
 ranlib_bin=""
@@ -109,8 +109,14 @@ else
 fi
 
 # Check if the build output already exists
-if [ -f "build/$folder/librocksdb.a" ]; then
-  echo "** BUILD SKIPPED: build/$folder/librocksdb.a already exists **"
+OUTPUT_DIR="../build/lib/$folder"
+
+# Ensure the output directory exists before building
+mkdir -p "$OUTPUT_DIR"
+
+# Check if the build output already exists
+if [ -f "${OUTPUT_DIR}/librocksdb.a" ]; then
+  echo "** BUILD SKIPPED: ${OUTPUT_DIR}/librocksdb.a already exists **"
   exit 0
 fi
 
@@ -118,13 +124,13 @@ if [[ "$(uname -s)" == "Linux" ]]; then
   output=$(
     make -j"$MAKE_JOBS" \
       LIB_MODE=static \
-      LIBNAME="build/$folder/librocksdb" \
+      LIBNAME="${OUTPUT_DIR}/librocksdb" \
       DEBUG_LEVEL=0 \
       CC=$cc \
       CXX=$cxx \
       AR=${ar_bin:-ar} \
       RANLIB=${ranlib_bin:-ranlib} \
-      OBJ_DIR="build/$folder" \
+      OBJ_DIR="$OUTPUT_DIR" \
       EXTRA_CXXFLAGS="$EXTRA_FLAGS" \
       EXTRA_CFLAGS="$EXTRA_FLAGS" \
       PORTABLE=1 \
@@ -132,7 +138,7 @@ if [[ "$(uname -s)" == "Linux" ]]; then
       static_lib
   )
 
-  check_build "$output" "$folder"
+  check_build "$output" "$OUTPUT_DIR"
 else
   echo "Should only build on linux"
   exit 1

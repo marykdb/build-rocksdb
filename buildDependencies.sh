@@ -24,7 +24,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ---------------------------------------------------------
 # Default Values
 # ---------------------------------------------------------
-DOWNLOAD_DIR="${SCRIPT_DIR}/lib"
+BUILD_ROOT="${SCRIPT_DIR}/build"
+DOWNLOAD_DIR="${BUILD_ROOT}/dependencies"
+INCLUDE_OUTPUT_DIR="${BUILD_ROOT}/include"
+DEPENDENCY_INCLUDE_DIR="${INCLUDE_OUTPUT_DIR}/dependencies"
 TOOLCHAIN_FILE=null
 
 # iOS Toolchain
@@ -128,7 +131,7 @@ OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 mkdir -p "$DOWNLOAD_DIR"
 DOWNLOAD_DIR="$(cd "$DOWNLOAD_DIR" && pwd)"
 
-mkdir -p "${DOWNLOAD_DIR}/include"
+mkdir -p "$DEPENDENCY_INCLUDE_DIR"
 # ---------------------------------------------------------
 # Toolchain configuration based on the requested output
 # ---------------------------------------------------------
@@ -325,7 +328,7 @@ build_zlib() {
   fi
   make clean > /dev/null
   make static
-  cp "zlib.h" "zconf.h" "${DOWNLOAD_DIR}/include/"
+  cp "zlib.h" "zconf.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libz.a" "${OUTPUT_DIR}/"
   popd > /dev/null
   echo "✅ Finished building libz.a into ${OUTPUT_DIR}!"
@@ -341,7 +344,7 @@ build_bzip2() {
   pushd "${src_dir}" > /dev/null
   make clean > /dev/null
   make CFLAGS="${EXTRA_CFLAGS} -fPIC -O2 -g -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
-  cp "bzlib.h" "${DOWNLOAD_DIR}/include/"
+  cp "bzlib.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libbz2.a" "${OUTPUT_DIR}/"
   popd > /dev/null
   echo "✅ Finished building libbz2.a into ${OUTPUT_DIR}!"
@@ -358,7 +361,7 @@ build_zstd() {
   make clean > /dev/null
   CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" make libzstd.a > /dev/null
   popd > /dev/null
-  cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${DOWNLOAD_DIR}/include/"
+  cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "${src_dir}/lib/libzstd.a" "${OUTPUT_DIR}/"
   echo "✅ Finished building libzstd.a into ${OUTPUT_DIR}!"
 }
@@ -410,7 +413,7 @@ build_snappy() {
   make clean > /dev/null
   CXXFLAGS="${EXTRA_CXXFLAGS} -fPIC -O2" CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" make ${SNAPPY_MAKE_TARGET} > /dev/null
   cmake --install . --prefix "${install_prefix}" > /dev/null
-  cp "snappy.h" "snappy-stubs-public.h" "${DOWNLOAD_DIR}/include/"
+  cp "snappy.h" "snappy-stubs-public.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libsnappy.a" "${OUTPUT_DIR}/"
   popd > /dev/null
   echo "✅ Finished building libsnappy.a into ${OUTPUT_DIR}!"
@@ -435,7 +438,7 @@ build_lz4() {
   fi
 
   TARGET_OS=$TARGET_OS CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" LDFLAGS="${EXTRA_LDFLAGS}" make liblz4.a > /dev/null
-  cp "lz4.h" "lz4hc.h" "${DOWNLOAD_DIR}/include/"
+  cp "lz4.h" "lz4hc.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "liblz4.a" "${OUTPUT_DIR}/"
   popd > /dev/null
   echo "✅ Finished building liblz4.a into ${OUTPUT_DIR}!"
