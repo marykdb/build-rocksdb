@@ -157,7 +157,7 @@ setup_android_ndk_toolchain() {
     android_x64|android_x86_64|x64|x86_64)
       triple="x86_64-linux-android${api_level}"
       abi="x86_64"
-      extra_flags="-march=x86-64 -msse4.2 -mpopcnt -mtune=intel"
+      extra_flags="-march=x86-64 -msse4.2 -mpopcnt"
       ;;
     *)
       _android_ndk_log "Unsupported Android architecture: ${arch}"
