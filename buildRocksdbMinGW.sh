@@ -133,12 +133,16 @@ echo "Building RocksDB with CMake..."
 output=$(cmake --build "$OBJ_DIR" --config Release -j --target rocksdb --parallel "${NUM_CORES}" 2>&1)
 
 # Check if the library was built successfully
-if [ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]; then
-    echo "** BUILD SUCCEEDED for $ARCH **"
+if [ -f "${OBJ_DIR}/librocksdb.a" ]; then
+  echo "** BUILD SUCCEEDED for $ARCH **"
+elif [ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]; then
+  echo "** BUILD SUCCEEDED for $ARCH **"
 elif echo "$output" | grep -q "up-to-date"; then
-    echo "** BUILD NOT NEEDED for $ARCH (Already up to date) **"
+  echo "** BUILD NOT NEEDED for $ARCH (Already up to date) **"
 else
-    echo "** BUILD FAILED for $ARCH **"
-    echo "$output"
-    exit 1
+  echo "** BUILD FAILED for $ARCH **"
+  echo "$output"
+  echo "Contents of ${OBJ_DIR} after failure:" >&2
+  find "$OBJ_DIR" -maxdepth 2 -type f -print >&2 || true
+  exit 1
 fi
