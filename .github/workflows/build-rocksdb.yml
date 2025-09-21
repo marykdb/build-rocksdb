@@ -340,13 +340,38 @@ jobs:
           path: artifacts
       - name: List downloaded artifacts
         run: ls -R artifacts
-      - name: Set release tag
-        id: release_tag
-        run: echo "tag=$(date +'%Y%m%dT%H%M%S')Z" >> "$GITHUB_OUTPUT"
+      - name: Determine RocksDB version
+        id: rocksdb_version
+        run: |
+          set -euo pipefail
+          version_file="rocksdb/include/rocksdb/version.h"
+          if [[ ! -f "$version_file" ]]; then
+            echo "RocksDB version header not found at $version_file" >&2
+            exit 1
+          fi
+          version="$(awk '/#define ROCKSDB_MAJOR/{major=$3} /#define ROCKSDB_MINOR/{minor=$3} /#define ROCKSDB_PATCH/{patch=$3} END{if(major==""||minor==""||patch=="") exit 1; printf "%s.%s.%s", major, minor, patch}' "$version_file")"
+          if [[ -z "$version" ]]; then
+            echo "Failed to parse RocksDB version from $version_file" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Set release metadata
+        id: release_metadata
+        env:
+          ROCKSDB_VERSION: ${{ steps.rocksdb_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ROCKSDB_VERSION}" ]]; then
+            echo "RocksDB version is empty" >&2
+            exit 1
+          fi
+          timestamp="$(date +'%Y%m%dT%H%M%S')Z"
+          echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
+          echo "tag=rocksdb-${ROCKSDB_VERSION}-${timestamp}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*.zip
-          name: RocksDB builds ${{ steps.release_tag.outputs.tag }}
-          tag_name: ${{ steps.release_tag.outputs.tag }}
+          name: RocksDB ${{ steps.rocksdb_version.outputs.version }} builds ${{ steps.release_metadata.outputs.timestamp }}
+          tag_name: ${{ steps.release_metadata.outputs.tag }}
           draft: false
           prerelease: false
