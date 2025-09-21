@@ -508,6 +508,10 @@ build_snappy() {
     fi
   fi
 
+  if [[ "$OUTPUT_DIR" == *android_arm32* ]]; then
+    EXTRA_CMAKEFLAGS+=" -DSNAPPY_HAVE_NEON=0"
+  fi
+
   cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         ${EXTRA_CMAKEFLAGS} \

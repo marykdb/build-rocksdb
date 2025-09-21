@@ -137,8 +137,14 @@ check_build() {
 
 MAKE_JOBS="$(determine_jobs)"
 
+MAKE_DISABLE_WERROR=()
+if [[ "$CONFIG_ARCH" == "android_arm32" || "$CONFIG_ARCH" == "android_x86" ]]; then
+  MAKE_DISABLE_WERROR+=("DISABLE_WARNING_AS_ERROR=1")
+fi
+
 BUILD_OUTPUT=$(
   make -j"${MAKE_JOBS}" \
+    "${MAKE_DISABLE_WERROR[@]}" \
     LIB_MODE=static \
     LIBNAME="${BUILD_DIR}/librocksdb" \
     DEBUG_LEVEL=0 \

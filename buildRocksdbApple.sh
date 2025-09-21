@@ -165,8 +165,16 @@ if [ -f "${BUILD_DIR}/librocksdb.a" ]; then
   exit 0
 fi
 
+MAKE_JOBS="$(sysctl -n hw.ncpu)"
+
+MAKE_DISABLE_WERROR=()
+if [[ "$ARCH" == "arm64_32" ]]; then
+  MAKE_DISABLE_WERROR+=("DISABLE_WARNING_AS_ERROR=1")
+fi
+
 BUILD_OUTPUT=$(
-  make -j"$(sysctl -n hw.ncpu)" \
+  make -j"${MAKE_JOBS}" \
+    "${MAKE_DISABLE_WERROR[@]}" \
     LIB_MODE=static \
     LIBNAME="${BUILD_DIR}/librocksdb" \
     DEBUG_LEVEL=0 \
