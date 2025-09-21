@@ -106,6 +106,49 @@ EXTRA_FLAGS="-fPIC -DANDROID -I${PROJECT_ROOT}/build/include -I${PROJECT_ROOT}/b
 EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_FLAGS+=" ${ANDROID_TOOLCHAIN_EXTRA_CFLAGS}"
 
+if [[ "$CONFIG_ARCH" == "android_arm32" || "$CONFIG_ARCH" == "android_x86" ]]; then
+  EXTRA_FLAGS+=" -Wno-shorten-64-to-32"
+fi
+
+
+if [[ "$CONFIG_ARCH" == "android_arm32" || "$CONFIG_ARCH" == "android_x86" ]]; then
+  export ANDROID_REAL_CC="$CC"
+  export ANDROID_REAL_CXX="$CXX"
+  WRAPPER_DIR="${BUILD_DIR}/toolchain-wrappers"
+  mkdir -p "$WRAPPER_DIR"
+  cat >"${WRAPPER_DIR}/cc" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    -Wshorten-64-to-32|-Werror=shorten-64-to-32)
+      continue
+      ;;
+  esac
+  args+=("$arg")
+done
+exec "$ANDROID_REAL_CC" "${args[@]}"
+EOF
+  cat >"${WRAPPER_DIR}/cxx" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    -Wshorten-64-to-32|-Werror=shorten-64-to-32)
+      continue
+      ;;
+  esac
+  args+=("$arg")
+done
+exec "$ANDROID_REAL_CXX" "${args[@]}"
+EOF
+  chmod +x "${WRAPPER_DIR}/cc" "${WRAPPER_DIR}/cxx"
+  CC="${WRAPPER_DIR}/cc"
+  CXX="${WRAPPER_DIR}/cxx"
+fi
+
 determine_jobs() {
   local jobs=""
   if command -v nproc >/dev/null 2>&1; then

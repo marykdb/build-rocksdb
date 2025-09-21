@@ -556,7 +556,7 @@ package_artifacts() {
     dest="$staging/lib/${rel}"
     mkdir -p "$(dirname "$dest")"
     cp "$libfile" "$dest"
-  done < <(find "$lib_base" -type f \( -name '*.a' -o -name '*.lib' \) -print0)
+  done < <(find "$lib_base" -maxdepth 1 -type f -name '*.a' -print0)
 
   mkdir -p "$PROJECT_ROOT/build/archives"
   local archive_path="$PROJECT_ROOT/build/archives/${artifact}"
