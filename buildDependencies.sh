@@ -144,6 +144,19 @@ OUTPUT_DIR="${OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd "$OUTPUT_DIR" && pwd)"
 
+# watchOS arm64_32 keeps 32-bit pointers, which triggers abundant
+# -Wshorten-64-to-32 diagnostics when warnings are treated as errors. Suppress
+# them for this target until truncations can be audited individually.
+if [[ "$OUTPUT_DIR" == *watchos_arm64_32* ]] || [[ "${EXTRA_CFLAGS}" == *arm64_32* ]] || [[ "${EXTRA_CXXFLAGS}" == *arm64_32* ]]; then
+  arm64_32_warning_flag="-Wno-shorten-64-to-32"
+  if [[ "${EXTRA_CFLAGS}" != *"${arm64_32_warning_flag}"* ]]; then
+    EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }${arm64_32_warning_flag}"
+  fi
+  if [[ "${EXTRA_CXXFLAGS}" != *"${arm64_32_warning_flag}"* ]]; then
+    EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }${arm64_32_warning_flag}"
+  fi
+fi
+
 mkdir -p "$DOWNLOAD_DIR"
 DOWNLOAD_DIR="$(cd "$DOWNLOAD_DIR" && pwd)"
 

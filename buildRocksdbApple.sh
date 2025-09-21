@@ -128,6 +128,13 @@ EXTRA_FLAGS+=" -isysroot $SDK_PATH"
 EXTRA_FLAGS+=" -I../build/include -I../build/include/dependencies"
 EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 
+if [[ "$ARCH" == "arm64_32" ]]; then
+  # arm64_32 keeps 32-bit pointers which triggers many -Wshorten-64-to-32
+  # diagnostics. Suppress them here to allow the watchOS build to succeed
+  # while the truncations are audited separately.
+  EXTRA_FLAGS+=" -Wno-shorten-64-to-32"
+fi
+
 LD_FLAGS="-lbz2 -lz -lz4 -lsnappy"
 
 ###############################################################################

@@ -218,20 +218,19 @@ jobs:
           name: rocksdb-ios-simulator-arm64
           path: build/archives/rocksdb-ios-simulator-arm64.zip
 
-# Unfortunately, compiling for arm64_32 is broken with RocksDB.
-#  watchos-arm64:
-#    name: watchOS arm64_32
-#    runs-on: macos-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          submodules: true
-#      - name: Build watchOS arm64_32 package
-#        run: ./build.sh watchosArm64
-#      - uses: actions/upload-artifact@v4
-#        with:
-#          name: rocksdb-watchos-arm64
-#          path: build/archives/rocksdb-watchos-arm64.zip
+  watchos-arm64:
+    name: watchOS arm64_32
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build watchOS arm64_32 package
+        run: ./build.sh watchosArm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-watchos-arm64
+          path: build/archives/rocksdb-watchos-arm64.zip
 
   watchos-device-arm64:
     name: watchOS Device ARM64
