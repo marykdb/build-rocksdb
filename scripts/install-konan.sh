@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ANDROID_NDK_HELPER="${SCRIPT_DIR}/android-ndk.sh"
+
 usage() {
   cat <<USAGE
 Usage: $0 --target=<konan-target> [--konan-version=<version>]
@@ -124,6 +127,27 @@ case "$TARGET" in
     pattern=""
     ;;
 esac
+
+if [[ "$TARGET" == android_* ]]; then
+  if [[ -z "${ANDROID_NDK_ROOT:-}" && -z "${ANDROID_NDK_HOME:-}" ]]; then
+    if [[ -f "$ANDROID_NDK_HELPER" ]]; then
+      # shellcheck source=./android-ndk.sh
+      source "$ANDROID_NDK_HELPER"
+      if ndk_dir=$(android_resolve_ndk_root); then
+        export ANDROID_NDK_ROOT="$ndk_dir"
+        if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
+          export ANDROID_NDK_HOME="$ndk_dir"
+        fi
+      else
+        echo "Failed to ensure Android NDK for ${TARGET}" >&2
+        exit 1
+      fi
+    else
+      echo "Android NDK helper not found at ${ANDROID_NDK_HELPER}" >&2
+      exit 1
+    fi
+  fi
+fi
 
 if [[ -n "$pattern" && -d "${KONAN_DATA_DIR}/dependencies" ]]; then
   if compgen -G "${KONAN_DATA_DIR}/dependencies/${pattern}" > /dev/null; then

@@ -79,6 +79,92 @@ _android_find_ndk_root() {
   return 1
 }
 
+_android_download_ndk() {
+  local version="${ANDROID_NDK_VERSION:-r26d}"
+  local uname_s
+  uname_s="$(uname -s)"
+  local host_tag
+  case "$uname_s" in
+    Linux*) host_tag="linux" ;;
+    Darwin*) host_tag="darwin" ;;
+    MINGW*|MSYS*|CYGWIN*) host_tag="windows" ;;
+    *)
+      _android_ndk_log "Automatic Android NDK download is not supported on host platform: ${uname_s}"
+      return 1
+      ;;
+  esac
+
+  local base_dir="${HOME}/.konan/dependencies"
+  local archive_name="android-ndk-${version}-${host_tag}.zip"
+  local archive_path="${base_dir}/${archive_name}"
+  local ndk_dir="${base_dir}/android-ndk-${version}"
+
+  if [[ -d "$ndk_dir" ]]; then
+    printf '%s\n' "$ndk_dir"
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    _android_ndk_log "curl is required to download the Android NDK automatically"
+    return 1
+  fi
+  if ! command -v unzip >/dev/null 2>&1; then
+    _android_ndk_log "unzip is required to extract the Android NDK archive"
+    return 1
+  fi
+
+  mkdir -p "$base_dir"
+
+  if [[ ! -f "$archive_path" ]]; then
+    local download_url="https://dl.google.com/android/repository/${archive_name}"
+    _android_ndk_log "Downloading Android NDK ${version} for ${host_tag}..."
+    if ! curl -fsSL "$download_url" -o "$archive_path"; then
+      _android_ndk_log "Failed to download Android NDK from ${download_url}"
+      rm -f "$archive_path"
+      return 1
+    fi
+  else
+    _android_ndk_log "Using cached Android NDK archive at ${archive_path}"
+  fi
+
+  _android_ndk_log "Extracting Android NDK archive..."
+  if ! unzip -q "$archive_path" -d "$base_dir"; then
+    _android_ndk_log "Failed to extract Android NDK archive ${archive_path}"
+    return 1
+  fi
+
+  if [[ ! -d "$ndk_dir" ]]; then
+    local extracted
+    extracted=$(_android_latest_directory "$base_dir" "android-ndk-*")
+    if [[ -n "$extracted" ]]; then
+      ndk_dir="$extracted"
+    fi
+  fi
+
+  if [[ ! -d "$ndk_dir" ]]; then
+    _android_ndk_log "Unable to locate Android NDK directory after extraction"
+    return 1
+  fi
+
+  printf '%s\n' "$ndk_dir"
+  return 0
+}
+
+android_resolve_ndk_root() {
+  local ndk_root
+  if ndk_root=$(_android_find_ndk_root); then
+    printf '%s\n' "$ndk_root"
+    return 0
+  fi
+
+  if ndk_root=$(_android_download_ndk); then
+    printf '%s\n' "$ndk_root"
+    return 0
+  fi
+
+  return 1
+}
+
 _android_host_tags() {
   local uname_s
   uname_s="$(uname -s)"
@@ -114,8 +200,8 @@ setup_android_ndk_toolchain() {
   fi
 
   local ndk_root
-  if ! ndk_root=$(_android_find_ndk_root); then
-    _android_ndk_log "Unable to locate the Android NDK. Set ANDROID_NDK_ROOT or ANDROID_NDK_HOME."
+  if ! ndk_root=$(android_resolve_ndk_root); then
+    _android_ndk_log "Unable to locate the Android NDK (automatic download failed). Set ANDROID_NDK_ROOT or ANDROID_NDK_HOME."
     return 1
   fi
 
@@ -227,11 +313,7 @@ setup_android_ndk_toolchain() {
   export RANLIB="$ranlib"
   export STRIP="$strip"
 
-  local extra_define="-D__ANDROID_API__=${api_level}"
-  local combined_flags="$extra_define"
-  if [[ -n "$extra_flags" ]]; then
-    combined_flags+=" ${extra_flags}"
-  fi
+  local combined_flags="${extra_flags}"
   export ANDROID_TOOLCHAIN_EXTRA_CFLAGS="$combined_flags"
   export ANDROID_TOOLCHAIN_EXTRA_CXXFLAGS="$combined_flags"
 
