@@ -53,18 +53,18 @@ DEFAULT_BZIP2_SHA256="ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c
 DEFAULT_BZIP2_DOWNLOAD_BASE="http://sourceware.org/pub/bzip2"
 
 # zstd
-DEFAULT_ZSTD_VER="1.5.6"
-DEFAULT_ZSTD_SHA256="8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1"
+DEFAULT_ZSTD_VER="1.5.7"
+DEFAULT_ZSTD_SHA256="eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3"
 DEFAULT_ZSTD_DOWNLOAD_BASE="https://github.com/facebook/zstd/releases/download/v${DEFAULT_ZSTD_VER}"
 
 # snappy
-DEFAULT_SNAPPY_VER="1.2.1"
-DEFAULT_SNAPPY_SHA256="736aeb64d86566d2236ddffa2865ee5d7a82d26c9016b36218fcc27ea4f09f86"
+DEFAULT_SNAPPY_VER="1.2.2"
+DEFAULT_SNAPPY_SHA256="90f74bc1fbf78a6c56b3c4a082a05103b3a56bb17bca1a27e052ea11723292dc"
 DEFAULT_SNAPPY_DOWNLOAD_BASE="https://github.com/google/snappy/archive"
 
 # lz4
-DEFAULT_LZ4_VER="1.9.4"
-DEFAULT_LZ4_SHA256="0b0e3aa07c8c063ddf40b082bdf7e37a1562bda40a0ff5272957f3e987e0e54b"
+DEFAULT_LZ4_VER="1.10.0"
+DEFAULT_LZ4_SHA256="537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
 DEFAULT_LZ4_DOWNLOAD_BASE="https://github.com/lz4/lz4/archive"
 
 # Build Flags (can be overridden by environment variables)
@@ -483,6 +483,8 @@ build_zstd() {
     CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" libzstd.a > /dev/null
   popd > /dev/null
   cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${DEPENDENCY_INCLUDE_DIR}/"
+  cp "${src_dir}/lib/zdict.h" "${src_dir}/lib/zdict.h" "${DEPENDENCY_INCLUDE_DIR}/"
+  cp "${src_dir}/lib/zstd_errors.h" "${src_dir}/lib/zstd_errors.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "${src_dir}/lib/libzstd.a" "${OUTPUT_DIR}/"
   echo "✅ Finished building libzstd.a into ${OUTPUT_DIR}!"
 }
