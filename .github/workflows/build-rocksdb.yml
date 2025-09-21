@@ -321,6 +321,7 @@ jobs:
       - macos-arm64
       - ios-arm64
       - ios-simulator-arm64
+      - watchos-arm64
       - watchos-device-arm64
       - watchos-simulator-arm64
       - tvos-arm64

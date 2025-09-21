@@ -17,6 +17,8 @@
 
 set -e  # Exit immediately if any command fails.
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
 ###############################################################################
 # Parse arguments
 ###############################################################################
@@ -116,7 +118,7 @@ fi
 ###############################################################################
 SIM_SUFFIX=$([[ "$SIMULATOR" == true ]] && echo "_simulator" || echo "")
 
-BUILD_DIR="../build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
+BUILD_DIR="${PROJECT_ROOT}/build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
 
 ###############################################################################
 # Common compiler & linker flags
@@ -133,6 +135,52 @@ if [[ "$ARCH" == "arm64_32" ]]; then
   # diagnostics. Suppress them here to allow the watchOS build to succeed
   # while the truncations are audited separately.
   EXTRA_FLAGS+=" -Wno-shorten-64-to-32"
+fi
+
+if [[ "$ARCH" == "arm64_32" ]]; then
+  if [[ -z "${CC:-}" ]]; then
+    export APPLE_REAL_CC="$(xcrun --sdk "$SDK_NAME" --find clang)"
+  else
+    export APPLE_REAL_CC="$CC"
+  fi
+  if [[ -z "${CXX:-}" ]]; then
+    export APPLE_REAL_CXX="$(xcrun --sdk "$SDK_NAME" --find clang++)"
+  else
+    export APPLE_REAL_CXX="$CXX"
+  fi
+  WRAPPER_DIR="${PROJECT_ROOT}/build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}/toolchain-wrappers"
+  mkdir -p "$WRAPPER_DIR"
+  cat >"${WRAPPER_DIR}/cc" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    -Wshorten-64-to-32|-Werror=shorten-64-to-32)
+      continue
+      ;;
+  esac
+  args+=("$arg")
+ done
+exec "$APPLE_REAL_CC" "${args[@]}"
+EOF
+  cat >"${WRAPPER_DIR}/cxx" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args=()
+for arg in "$@"; do
+  case "$arg" in
+    -Wshorten-64-to-32|-Werror=shorten-64-to-32)
+      continue
+      ;;
+  esac
+  args+=("$arg")
+ done
+exec "$APPLE_REAL_CXX" "${args[@]}"
+EOF
+  chmod +x "${WRAPPER_DIR}/cc" "${WRAPPER_DIR}/cxx"
+  export CC="$WRAPPER_DIR/cc"
+  export CXX="$WRAPPER_DIR/cxx"
 fi
 
 LD_FLAGS="-lbz2 -lz -lz4 -lsnappy"
@@ -172,7 +220,11 @@ if [ -f "${BUILD_DIR}/librocksdb.a" ]; then
   exit 0
 fi
 
-MAKE_JOBS="$(sysctl -n hw.ncpu)"
+MAKE_JOBS="$(
+  sysctl -n hw.logicalcpu 2>/dev/null ||
+  sysctl -n hw.ncpu 2>/dev/null ||
+  echo 4
+)"
 
 MAKE_DISABLE_WERROR=()
 if [[ "$ARCH" == "arm64_32" ]]; then
