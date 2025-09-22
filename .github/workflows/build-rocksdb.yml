@@ -2,7 +2,7 @@ name: Build RocksDB
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, retry ]
   workflow_dispatch:
 
 permissions:
