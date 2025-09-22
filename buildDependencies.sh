@@ -21,6 +21,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+DEFAULT_KONAN_VERSION="2.2.20"
+KONAN_VERSION="${KONAN_VERSION:-$DEFAULT_KONAN_VERSION}"
+KONAN_INSTALL_SCRIPT="${SCRIPT_DIR}/scripts/install-konan.sh"
+
 if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
   export PATH="${LLVM_MINGW_ROOT}/bin:${PATH}"
 fi
@@ -67,6 +71,7 @@ DEFAULT_LZ4_VER="1.10.0"
 DEFAULT_LZ4_SHA256="537512904744b35e232912055ccf8ec66d768639ff3abe5788d90d792ec5f48b"
 DEFAULT_LZ4_DOWNLOAD_BASE="https://github.com/lz4/lz4/archive"
 
+
 # Build Flags (can be overridden by environment variables)
 ARCHFLAG="${ARCHFLAG:-}"
 EXTRA_CMAKEFLAGS="${EXTRA_CMAKEFLAGS:-}"
@@ -78,6 +83,33 @@ SNAPPY_MAKE_TARGET="${SNAPPY_MAKE_TARGET:-}"
 # CROSS_PREFIX is only set for mingw builds but is referenced unconditionally.
 # Provide an empty default to avoid "unbound variable" errors under `set -u`.
 CROSS_PREFIX="${CROSS_PREFIX:-}"
+
+# ---------------------------------------------------------
+# Minimal size defaults and strippers
+# ---------------------------------------------------------
+# Prefer size-optimised code and hidden visibility by default; can be overridden via OPT_CFLAGS env
+OPT_CFLAGS="${OPT_CFLAGS:--Os -fPIC -fvisibility=hidden -DNDEBUG}"
+
+# Detect a suitable strip tool for static archives (optional)
+STRIP_BIN="${STRIP_BIN:-}"
+if [[ -z "$STRIP_BIN" ]]; then
+  if command -v "${CROSS_PREFIX}strip" >/dev/null 2>&1; then
+    STRIP_BIN="${CROSS_PREFIX}strip"
+  elif command -v llvm-strip >/dev/null 2>&1; then
+    STRIP_BIN="llvm-strip"
+  elif command -v strip >/dev/null 2>&1; then
+    STRIP_BIN="strip"
+  else
+    STRIP_BIN=""
+  fi
+fi
+
+strip_archive() {
+  local archive="$1"
+  if [[ -n "$STRIP_BIN" && -f "$archive" ]]; then
+    "$STRIP_BIN" -S -x "$archive" || true
+  fi
+}
 
 apply_android_toolchain_flags() {
   EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }${ANDROID_TOOLCHAIN_EXTRA_CFLAGS}"
@@ -166,78 +198,13 @@ mkdir -p "$DEPENDENCY_INCLUDE_DIR"
 # ---------------------------------------------------------
 set +u
 if [[ "$OUTPUT_DIR" == *linux_x86_64* ]]; then
-  host_uname="$(uname -s)"
-  if [[ "$host_uname" == "Linux" ]]; then
-    export CC="${CC:-$(command -v gcc)}"
-    export CXX="${CXX:-$(command -v g++)}"
-  else
-    KONAN_DEPS_DIR="${HOME}/.konan/dependencies"
-    if [[ -d "$KONAN_DEPS_DIR" ]]; then
-      KONAN_GCC=("${KONAN_DEPS_DIR}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-gcc)
-      KONAN_GPP=("${KONAN_DEPS_DIR}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-g++)
-      if [[ -x "${KONAN_GCC[0]}" && -x "${KONAN_GPP[0]}" ]]; then
-        export CC="${KONAN_GCC[0]}"
-        export CXX="${KONAN_GPP[0]}"
-      fi
-    fi
-    if [[ -z "${CC:-}" || -z "${CXX:-}" ]]; then
-      echo "❌ Missing Kotlin/Native cross-compilation toolchain for linux_x86_64." >&2
-      echo "   Please run the build on Linux or install the Konan cross toolchain." >&2
-      exit 1
-    fi
-  fi
+  ensure_konan_toolchain "linux_x64" "x86_64-unknown-linux-gnu"
+  EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }-march=x86-64"
+  EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }-march=x86-64"
 elif [[ "$OUTPUT_DIR" == *linux_arm64* ]]; then
-  host_uname="$(uname -s)"
-  if [[ "$host_uname" == "Linux" ]]; then
-    CC_CANDIDATE="${CC:-$(command -v aarch64-linux-gnu-gcc 2>/dev/null || true)}"
-    CXX_CANDIDATE="${CXX:-$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)}"
-    AR_CANDIDATE="${AR:-$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)}"
-    RANLIB_CANDIDATE="${RANLIB:-$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)}"
-
-    if [[ -z "$CC_CANDIDATE" || -z "$CXX_CANDIDATE" ]]; then
-      host_arch="$(uname -m)"
-      if [[ "$host_arch" == "aarch64" || "$host_arch" == "arm64" ]]; then
-        CC_CANDIDATE="${CC:-$(command -v gcc 2>/dev/null || true)}"
-        CXX_CANDIDATE="${CXX:-$(command -v g++ 2>/dev/null || true)}"
-        if [[ -z "$AR_CANDIDATE" ]]; then
-          AR_CANDIDATE="${AR:-$(command -v ar 2>/dev/null || true)}"
-        fi
-        if [[ -z "$RANLIB_CANDIDATE" ]]; then
-          RANLIB_CANDIDATE="${RANLIB:-$(command -v ranlib 2>/dev/null || true)}"
-        fi
-      fi
-    fi
-
-    if [[ -n "$CC_CANDIDATE" && -n "$CXX_CANDIDATE" ]]; then
-      export CC="$CC_CANDIDATE"
-      export CXX="$CXX_CANDIDATE"
-      if [[ -n "$AR_CANDIDATE" ]]; then
-        export AR="$AR_CANDIDATE"
-      fi
-      if [[ -n "$RANLIB_CANDIDATE" ]]; then
-        export RANLIB="$RANLIB_CANDIDATE"
-      fi
-    else
-      echo "❌ Missing aarch64 cross-compilation toolchain (e.g. aarch64-linux-gnu-gcc)." >&2
-      echo "   Install your distribution's cross GCC or run the build on a host with Konan installed." >&2
-      exit 1
-    fi
-  else
-    KONAN_DEPS_DIR="${HOME}/.konan/dependencies"
-    if [[ -d "$KONAN_DEPS_DIR" ]]; then
-      KONAN_GCC=("${KONAN_DEPS_DIR}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-gcc)
-      KONAN_GPP=("${KONAN_DEPS_DIR}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-g++)
-      if [[ -x "${KONAN_GCC[0]}" && -x "${KONAN_GPP[0]}" ]]; then
-        export CC="${KONAN_GCC[0]}"
-        export CXX="${KONAN_GPP[0]}"
-      fi
-    fi
-    if [[ -z "${CC:-}" || -z "${CXX:-}" ]]; then
-      echo "❌ Missing Kotlin/Native cross-compilation toolchain for linux_arm64." >&2
-      echo "   Please run the build from a host with the Konan linux_arm64 toolchain installed." >&2
-      exit 1
-    fi
-  fi
+  ensure_konan_toolchain "linux_arm64" "aarch64-unknown-linux-gnu"
+  EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }-march=armv8-a"
+  EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }-march=armv8-a"
 elif [[ "$OUTPUT_DIR" == *android_arm32* ]]; then
   if ! setup_android_ndk_toolchain "android_arm32"; then
     echo "❌ Failed to configure Android NDK toolchain for arm32" >&2
@@ -412,7 +379,7 @@ download_and_verify() {
 build_zlib() {
   local tarball="${DOWNLOAD_DIR}/zlib-${ZLIB_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/zlib-${ZLIB_VER}"
-  local cflags="-fPIC"
+  local cflags="${OPT_CFLAGS} -DNO_GZCOMPRESS -DNO_GZIP"
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
 
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
@@ -449,6 +416,7 @@ build_zlib() {
 
   cp "zlib.h" "zconf.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libz.a" "${OUTPUT_DIR}/"
+  strip_archive "${OUTPUT_DIR}/libz.a"
   popd > /dev/null
   echo "✅ Finished building libz.a into ${OUTPUT_DIR}!"
 }
@@ -463,9 +431,10 @@ build_bzip2() {
   pushd "${src_dir}" > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    CFLAGS="${EXTRA_CFLAGS} -fPIC -O2 -g -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
+    CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
   cp "bzlib.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libbz2.a" "${OUTPUT_DIR}/"
+  strip_archive "${OUTPUT_DIR}/libbz2.a"
   popd > /dev/null
   echo "✅ Finished building libbz2.a into ${OUTPUT_DIR}!"
 }
@@ -480,12 +449,14 @@ build_zstd() {
   pushd "${src_dir}/lib" > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" libzstd.a > /dev/null
+    HAVE_PTHREAD=0 ZSTD_LEGACY_SUPPORT=0 \
+    CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" \
+    CPPFLAGS="${EXTRA_CFLAGS} -DDEBUGLEVEL=0" \
+    libzstd.a > /dev/null
   popd > /dev/null
-  cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${DEPENDENCY_INCLUDE_DIR}/"
-  cp "${src_dir}/lib/zdict.h" "${src_dir}/lib/zdict.h" "${DEPENDENCY_INCLUDE_DIR}/"
-  cp "${src_dir}/lib/zstd_errors.h" "${src_dir}/lib/zstd_errors.h" "${DEPENDENCY_INCLUDE_DIR}/"
+  cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${src_dir}/lib/zstd_errors.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "${src_dir}/lib/libzstd.a" "${OUTPUT_DIR}/"
+  strip_archive "${OUTPUT_DIR}/libzstd.a"
   echo "✅ Finished building libzstd.a into ${OUTPUT_DIR}!"
 }
 
@@ -529,6 +500,7 @@ build_snappy() {
 
   cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
         ${EXTRA_CMAKEFLAGS} \
         -DCMAKE_INSTALL_PREFIX="${install_prefix}" \
         -DCMAKE_C_FLAGS="${EXTRA_CFLAGS}" \
@@ -539,10 +511,11 @@ build_snappy() {
 
   make CC="${CC:-cc}" CXX="${CXX:-c++}" clean > /dev/null
   make CC="${CC:-cc}" CXX="${CXX:-c++}" \
-    CXXFLAGS="${EXTRA_CXXFLAGS} -fPIC -O2" CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" ${SNAPPY_MAKE_TARGET} > /dev/null
+    CXXFLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}" CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" ${SNAPPY_MAKE_TARGET} > /dev/null
   cmake --install . --prefix "${install_prefix}" > /dev/null
   cp "snappy.h" "snappy-stubs-public.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libsnappy.a" "${OUTPUT_DIR}/"
+  strip_archive "${OUTPUT_DIR}/libsnappy.a"
   popd > /dev/null
   echo "✅ Finished building libsnappy.a into ${OUTPUT_DIR}!"
 }
@@ -566,9 +539,10 @@ build_lz4() {
   fi
 
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    TARGET_OS=$TARGET_OS CFLAGS="${EXTRA_CFLAGS} -fPIC -O2" LDFLAGS="${EXTRA_LDFLAGS}" liblz4.a > /dev/null
+    TARGET_OS=$TARGET_OS CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" LDFLAGS="${EXTRA_LDFLAGS}" liblz4.a > /dev/null
   cp "lz4.h" "lz4hc.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "liblz4.a" "${OUTPUT_DIR}/"
+  strip_archive "${OUTPUT_DIR}/liblz4.a"
   popd > /dev/null
   echo "✅ Finished building liblz4.a into ${OUTPUT_DIR}!"
 }
