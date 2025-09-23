@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
+# shellcheck source=./scripts/build-rocksdb-common.sh
+source "${PROJECT_ROOT}/scripts/build-rocksdb-common.sh"
+
 usage() {
   cat <<USAGE
 Usage: $0 --arch=<arm32|arm64|x86|x64> [--api-level <level>]
@@ -95,12 +98,12 @@ if ! setup_android_ndk_toolchain "$CONFIG_ARCH" "$API_LEVEL"; then
 fi
 
 BUILD_DIR="${PROJECT_ROOT}/build/lib/${OUTPUT_SUBDIR}"
-mkdir -p "$BUILD_DIR"
 
-if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
-  echo "** BUILD SKIPPED: ${BUILD_DIR}/librocksdb.a already exists **"
+if build_common::check_existing_artifacts "$BUILD_DIR"; then
   exit 0
 fi
+
+mkdir -p "$BUILD_DIR"
 
 EXTRA_FLAGS="-fPIC -g0 -ffunction-sections -fdata-sections -DANDROID -I${PROJECT_ROOT}/build/include -I${PROJECT_ROOT}/build/include/dependencies"
 EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
@@ -117,153 +120,52 @@ RANLIB_BIN="$RANLIB"
 STRIP_BIN="$STRIP"
 
 if [[ "$CONFIG_ARCH" == "android_arm32" || "$CONFIG_ARCH" == "android_x86" ]]; then
-  export ANDROID_REAL_CC="$CC_BIN"
-  export ANDROID_REAL_CXX="$CXX_BIN"
   WRAPPER_DIR="${BUILD_DIR}/toolchain-wrappers"
   mkdir -p "$WRAPPER_DIR"
-  cat >"${WRAPPER_DIR}/cc" <<'WRAP_CC'
-#!/usr/bin/env bash
-set -euo pipefail
-args=()
-for arg in "$@"; do
-  case "$arg" in
-    -Wshorten-64-to-32|-Werror=shorten-64-to-32)
-      continue
-      ;;
-  esac
-  args+=("$arg")
- done
-exec "$ANDROID_REAL_CC" "${args[@]}"
-WRAP_CC
-  cat >"${WRAPPER_DIR}/cxx" <<'WRAP_CXX'
-#!/usr/bin/env bash
-set -euo pipefail
-args=()
-for arg in "$@"; do
-  case "$arg" in
-    -Wshorten-64-to-32|-Werror=shorten-64-to-32)
-      continue
-      ;;
-  esac
-  args+=("$arg")
- done
-exec "$ANDROID_REAL_CXX" "${args[@]}"
-WRAP_CXX
-  chmod +x "${WRAPPER_DIR}/cc" "${WRAPPER_DIR}/cxx"
+  build_common::create_flag_filter_wrapper \
+    "${WRAPPER_DIR}/cc" \
+    "$CC_BIN" \
+    -Wshorten-64-to-32 \
+    -Werror=shorten-64-to-32
+  build_common::create_flag_filter_wrapper \
+    "${WRAPPER_DIR}/cxx" \
+    "$CXX_BIN" \
+    -Wshorten-64-to-32 \
+    -Werror=shorten-64-to-32
   CC_BIN="${WRAPPER_DIR}/cc"
   CXX_BIN="${WRAPPER_DIR}/cxx"
 fi
 
-DEPENDENCY_HEADERS_DIR="${PROJECT_ROOT}/build/include/dependencies"
-DEPENDENCY_INCLUDE_ROOT="${PROJECT_ROOT}/build/include"
-DEPENDENCY_LIB_DIR="${BUILD_DIR}"
-SNAPPY_PREFIX="${BUILD_DIR}/deps/snappy"
-SNAPPY_CMAKE_DIR="${SNAPPY_PREFIX}/lib/cmake/Snappy"
-SNAPPY_CONFIG_PATH="${SNAPPY_CMAKE_DIR}/SnappyConfig.cmake"
+NUM_CORES="$(build_common::default_parallel_jobs)"
 
-if [[ ! -f "${SNAPPY_CONFIG_PATH}" ]]; then
-  echo "Warning: Expected Snappy CMake package at ${SNAPPY_CONFIG_PATH} not found. The build may fail if dependencies have not been prepared." >&2
-fi
-
-get_num_cores() {
-  if command -v nproc >/dev/null 2>&1; then
-    nproc 2>/dev/null || echo 4
-  elif command -v sysctl >/dev/null 2>&1; then
-    sysctl -n hw.logicalcpu 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4
-  else
-    echo 4
-  fi
-}
-
-NUM_CORES="$(get_num_cores)"
-
-CMAKE_ARGS=(
-  -S "rocksdb"
-  -B "$BUILD_DIR"
+cmake_args=(
   -DCMAKE_C_COMPILER="${CC_BIN}"
   -DCMAKE_CXX_COMPILER="${CXX_BIN}"
   -DCMAKE_AR="${AR_BIN}"
   -DCMAKE_RANLIB="${RANLIB_BIN}"
   -DCMAKE_STRIP="${STRIP_BIN}"
-  -DCMAKE_PREFIX_PATH="${SNAPPY_PREFIX}"
-  -DSnappy_DIR="${SNAPPY_CMAKE_DIR}"
-  -DCMAKE_INCLUDE_PATH="${DEPENDENCY_INCLUDE_ROOT};${DEPENDENCY_HEADERS_DIR}"
-  -DCMAKE_LIBRARY_PATH="${DEPENDENCY_LIB_DIR}"
-  -DZLIB_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DZLIB_LIBRARY="${DEPENDENCY_LIB_DIR}/libz.a"
-  -DZLIB_USE_STATIC_LIBS=ON
-  -DBZIP2_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DBZIP2_LIBRARIES="${DEPENDENCY_LIB_DIR}/libbz2.a"
-  -Dlz4_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
-  -Dlz4_LIBRARIES="${DEPENDENCY_LIB_DIR}/liblz4.a"
-  -DZSTD_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
-  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
-  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
-  -DCMAKE_C_FLAGS="${EXTRA_FLAGS}"
-  -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}"
-  -DCMAKE_BUILD_TYPE=Release
-  -DCMAKE_INSTALL_PREFIX="${BUILD_DIR}"
-  -DPORTABLE=1
-  -DWITH_GFLAGS=OFF
-  -DWITH_SNAPPY=ON
-  -DWITH_LZ4=ON
-  -DWITH_ZLIB=ON
-  -DWITH_ZSTD=ON
-  -DWITH_BZ2=ON
-  -DROCKSDB_BUILD_SHARED=OFF
-  -DROCKSDB_BUILD_STATIC=ON
-  -DWITH_TESTS=OFF
-  -DWITH_BENCHMARK_TOOLS=OFF
-  -DWITH_TOOLS=OFF
-  -DWITH_JNI=OFF
-  -DWITH_JEMALLOC=OFF
-  -DFAIL_ON_WARNINGS=OFF
-  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
   -DCMAKE_ANDROID_STL_TYPE=c++_static
 )
 
 if [[ -n "${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE:-}" ]]; then
-  CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE}")
+  cmake_args+=(-DCMAKE_TOOLCHAIN_FILE="${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE}")
 fi
 
 if [[ -n "${ANDROID_TOOLCHAIN_TRIPLE:-}" ]]; then
-  CMAKE_ARGS+=(-DCMAKE_C_COMPILER_TARGET="${ANDROID_TOOLCHAIN_TRIPLE}" -DCMAKE_CXX_COMPILER_TARGET="${ANDROID_TOOLCHAIN_TRIPLE}")
+  cmake_args+=(-DCMAKE_C_COMPILER_TARGET="${ANDROID_TOOLCHAIN_TRIPLE}" -DCMAKE_CXX_COMPILER_TARGET="${ANDROID_TOOLCHAIN_TRIPLE}")
 fi
 
 if [[ -n "${ANDROID_TOOLCHAIN_CMAKE_FLAGS:-}" ]]; then
   # shellcheck disable=SC2206
   EXTRA_CMAKE_FLAGS=(${ANDROID_TOOLCHAIN_CMAKE_FLAGS})
-  CMAKE_ARGS+=("${EXTRA_CMAKE_FLAGS[@]}")
+  cmake_args+=("${EXTRA_CMAKE_FLAGS[@]}")
 fi
 
-cmake "${CMAKE_ARGS[@]}"
+build_common::cmake_configure \
+  "$PROJECT_ROOT" \
+  "$BUILD_DIR" \
+  "$EXTRA_FLAGS" \
+  "$EXTRA_FLAGS" \
+  "${cmake_args[@]}"
 
-echo "Building RocksDB with CMake..."
-BUILD_LOG="${BUILD_DIR}/build.log"
-set +e
-cmake --build "$BUILD_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" >"$BUILD_LOG" 2>&1
-build_status=$?
-set -e
-
-if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
-  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
-  exit 0
-elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
-  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
-  exit 0
-elif grep -q "up-to-date" "$BUILD_LOG"; then
-  echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
-  exit 0
-elif [[ $build_status -ne 0 ]]; then
-  echo "** BUILD FAILED for ${BUILD_DIR} **"
-  echo "—— Tail of build log ————————————————"
-  tail -n 400 "$BUILD_LOG" || true
-  echo "———————————————————————————————————"
-  echo "Full log at: $BUILD_LOG"
-  echo "Contents of ${BUILD_DIR} after failure:" >&2
-  find "$BUILD_DIR" -maxdepth 2 -type f -print >&2 || true
-  exit 1
-else
-  echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
-  exit 1
-fi
+build_common::run_cmake_build "$BUILD_DIR" "$NUM_CORES"

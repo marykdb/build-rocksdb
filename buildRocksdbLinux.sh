@@ -24,16 +24,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 REPO_ROOT="$SCRIPT_DIR"
 
-get_num_cores() {
-  if command -v nproc >/dev/null 2>&1; then
-    nproc
-  elif command -v sysctl >/dev/null 2>&1; then
-    sysctl -n hw.logicalcpu 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4
-  else
-    echo "Error: Unable to determine the number of CPU cores for parallel build." >&2
-    exit 1
-  fi
-}
+# shellcheck source=./scripts/build-rocksdb-common.sh
+source "${REPO_ROOT}/scripts/build-rocksdb-common.sh"
 
 HOST_OS="$(uname -s)"
 if [[ "$HOST_OS" != "Linux" ]]; then
@@ -106,114 +98,40 @@ if [[ -z "$AR_BIN" || -z "$RANLIB_BIN" ]]; then
   exit 1
 fi
 
-BUILD_DIR="build/lib/${BUILD_SUBDIR}"
-SNAPPY_PREFIX="${BUILD_DIR}/deps/snappy"
-SNAPPY_CMAKE_DIR="${SNAPPY_PREFIX}/lib/cmake/Snappy"
-DEPENDENCY_HEADERS_DIR="${REPO_ROOT}/build/include/dependencies"
-DEPENDENCY_INCLUDE_ROOT="${REPO_ROOT}/build/include"
-DEPENDENCY_LIB_DIR="${REPO_ROOT}/${BUILD_DIR}"
-SNAPPY_CONFIG_PATH="${REPO_ROOT}/${SNAPPY_CMAKE_DIR}/SnappyConfig.cmake"
+BUILD_DIR="${REPO_ROOT}/build/lib/${BUILD_SUBDIR}"
 
-if [[ ! -f "${SNAPPY_CONFIG_PATH}" ]]; then
-  echo "Warning: Expected Snappy CMake package at ${SNAPPY_CONFIG_PATH} not found. The build may fail if dependencies have not been prepared." >&2
-fi
-
-if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
-  echo "** BUILD SKIPPED: ${BUILD_DIR}/librocksdb.a already exists **"
-  exit 0
-fi
-
-if [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
-  echo "** BUILD SKIPPED: ${BUILD_DIR}/rocksdb-build/librocksdb.a already exists **"
+if build_common::check_existing_artifacts "$BUILD_DIR"; then
   exit 0
 fi
 
 mkdir -p "$BUILD_DIR"
 
-NUM_CORES="$(get_num_cores)"
+NUM_CORES="$(build_common::default_parallel_jobs)"
 if [[ -n "${ROCKSDB_MAKE_JOBS:-}" ]]; then
   NUM_CORES="${ROCKSDB_MAKE_JOBS}"
 elif [[ "$ARCH" == "arm64" && "$NUM_CORES" -gt 2 ]]; then
   NUM_CORES=2
 fi
 
-CMAKE_TOOLCHAIN_ARGS=(-DCMAKE_SYSTEM_NAME=Linux)
+cmake_args=(-DCMAKE_SYSTEM_NAME=Linux)
 if [[ -n "$CMAKE_SYSTEM_PROCESSOR" ]]; then
-  CMAKE_TOOLCHAIN_ARGS+=(-DCMAKE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}")
+  cmake_args+=(-DCMAKE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}")
 fi
 
-CMAKE_ARGS=(
-  -S "rocksdb"
-  -B "$BUILD_DIR"
-  "${CMAKE_TOOLCHAIN_ARGS[@]}"
+cmake_args+=(
   -DCMAKE_C_COMPILER="${CC_BIN}"
   -DCMAKE_CXX_COMPILER="${CXX_BIN}"
   -DCMAKE_AR="${AR_BIN}"
   -DCMAKE_RANLIB="${RANLIB_BIN}"
-  -DCMAKE_PREFIX_PATH="${REPO_ROOT}/${SNAPPY_PREFIX}"
-  -DSnappy_DIR="${REPO_ROOT}/${SNAPPY_CMAKE_DIR}"
-  -DCMAKE_INCLUDE_PATH="${DEPENDENCY_INCLUDE_ROOT};${DEPENDENCY_HEADERS_DIR}"
-  -DCMAKE_LIBRARY_PATH="${DEPENDENCY_LIB_DIR}"
-  -DZLIB_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DZLIB_LIBRARY="${DEPENDENCY_LIB_DIR}/libz.a"
-  -DZLIB_USE_STATIC_LIBS=ON
-  -DBZIP2_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DBZIP2_LIBRARIES="${DEPENDENCY_LIB_DIR}/libbz2.a"
-  -Dlz4_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
-  -Dlz4_LIBRARIES="${DEPENDENCY_LIB_DIR}/liblz4.a"
-  -DZSTD_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
-  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
-  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
-  -DCMAKE_C_FLAGS="${EXTRA_C_FLAGS}"
-  -DCMAKE_CXX_FLAGS="${EXTRA_C_FLAGS}"
-  -DCMAKE_BUILD_TYPE=Release
-  -DCMAKE_INSTALL_PREFIX="${BUILD_DIR}"
-  -DPORTABLE=1
-  -DWITH_GFLAGS=OFF
-  -DWITH_SNAPPY=ON
-  -DWITH_LZ4=ON
-  -DWITH_ZLIB=ON
-  -DWITH_ZSTD=ON
-  -DWITH_BZ2=ON
-  -DROCKSDB_BUILD_SHARED=OFF
-  -DROCKSDB_BUILD_STATIC=ON
-  -DWITH_TESTS=OFF
-  -DWITH_BENCHMARK_TOOLS=OFF
-  -DWITH_TOOLS=OFF
-  -DWITH_JNI=OFF
-  -DWITH_JEMALLOC=OFF
-  -DFAIL_ON_WARNINGS=OFF
-  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
 )
 
-cmake "${CMAKE_ARGS[@]}"
+EXTRA_CXX_FLAGS="$EXTRA_C_FLAGS"
 
-echo "Building RocksDB with CMake..."
-BUILD_LOG="${BUILD_DIR}/build.log"
-set +e
-cmake --build "$BUILD_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" >"$BUILD_LOG" 2>&1
-build_status=$?
-set -e
+build_common::cmake_configure \
+  "$REPO_ROOT" \
+  "$BUILD_DIR" \
+  "$EXTRA_C_FLAGS" \
+  "$EXTRA_CXX_FLAGS" \
+  "${cmake_args[@]}"
 
-if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
-  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
-  exit 0
-elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
-  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
-  exit 0
-elif grep -q "up-to-date" "$BUILD_LOG"; then
-  echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
-  exit 0
-elif [[ $build_status -ne 0 ]]; then
-  echo "** BUILD FAILED for ${BUILD_DIR} **"
-  echo "—— Tail of build log ————————————————"
-  tail -n 400 "$BUILD_LOG" || true
-  echo "———————————————————————————————————"
-  echo "Full log at: $BUILD_LOG"
-  echo "Contents of ${BUILD_DIR} after failure:" >&2
-  find "$BUILD_DIR" -maxdepth 2 -type f -print >&2 || true
-  exit 1
-else
-  echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
-  exit 1
-fi
+build_common::run_cmake_build "$BUILD_DIR" "$NUM_CORES"
