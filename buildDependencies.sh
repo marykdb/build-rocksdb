@@ -21,9 +21,6 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-DEFAULT_KONAN_VERSION="2.2.20"
-KONAN_VERSION="${KONAN_VERSION:-$DEFAULT_KONAN_VERSION}"
-KONAN_INSTALL_SCRIPT="${SCRIPT_DIR}/scripts/install-konan.sh"
 
 if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
   export PATH="${LLVM_MINGW_ROOT}/bin:${PATH}"
@@ -198,11 +195,27 @@ mkdir -p "$DEPENDENCY_INCLUDE_DIR"
 # ---------------------------------------------------------
 set +u
 if [[ "$OUTPUT_DIR" == *linux_x86_64* ]]; then
-  ensure_konan_toolchain "linux_x64" "x86_64-unknown-linux-gnu"
-  EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }-march=x86-64"
-  EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }-march=x86-64"
+  # Linux x86_64: rely on system toolchain or user-provided CC/CXX
+  if [[ -z "${CC:-}" ]]; then export CC=gcc; fi
+  if [[ -z "${CXX:-}" ]]; then export CXX=g++; fi
+  EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }-m64"
+  EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }-m64"
 elif [[ "$OUTPUT_DIR" == *linux_arm64* ]]; then
-  ensure_konan_toolchain "linux_arm64" "aarch64-unknown-linux-gnu"
+  # Linux ARM64: prefer aarch64 cross-compiler if present; otherwise fall back
+  if [[ -z "${CC:-}" ]]; then
+    if command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+      export CC=aarch64-linux-gnu-gcc
+    else
+      export CC=gcc
+    fi
+  fi
+  if [[ -z "${CXX:-}" ]]; then
+    if command -v aarch64-linux-gnu-g++ >/dev/null 2>&1; then
+      export CXX=aarch64-linux-gnu-g++
+    else
+      export CXX=g++
+    fi
+  fi
   EXTRA_CFLAGS="${EXTRA_CFLAGS:+${EXTRA_CFLAGS} }-march=armv8-a"
   EXTRA_CXXFLAGS="${EXTRA_CXXFLAGS:+${EXTRA_CXXFLAGS} }-march=armv8-a"
 elif [[ "$OUTPUT_DIR" == *android_arm32* ]]; then

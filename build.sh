@@ -4,9 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
-DEFAULT_KONAN_VERSION="2.2.20"
-KONAN_VERSION="${KONAN_VERSION:-$DEFAULT_KONAN_VERSION}"
-
 usage() {
   cat <<'USAGE'
 Usage: ./build.sh [OPTIONS] [CONFIG ...]
@@ -15,7 +12,6 @@ Builds RocksDB artifacts using the repository's shell scripts.
 When no CONFIG values are provided, all configurations for the current host are built.
 
 Options:
-  --konan-version <version>  Override the Kotlin/Native version used to prepare toolchains.
   --list                     List available build configurations and exit.
   -h, --help                 Show this help message and exit.
 
@@ -67,52 +63,43 @@ register_config() {
 register_config \
   linuxX64 \
   host LINUX \
-  konan_target linux_x64 \
   output_dir linux_x86_64 \
   build_script buildRocksdbLinux.sh \
-  build_args "--arch=x86-64" \
+  build_args "--arch=x86_64" \
   artifact "rocksdb-linux-x86_64.zip" \
-  extra_cflags "-march=x86-64" \
-  requires_konan_mode never
+  extra_cflags "-m64" \
 
 register_config \
   linuxArm64 \
   host LINUX \
-  konan_target linux_arm64 \
   output_dir linux_arm64 \
   build_script buildRocksdbLinux.sh \
   build_args "--arch=arm64" \
   artifact "rocksdb-linux-arm64.zip" \
   extra_cflags "-march=armv8-a" \
-  requires_konan_mode auto \
   auto_requires_host_arch arm
 
 register_config \
   mingwX64 \
   host LINUX \
-  konan_target mingw_x64 \
   output_dir mingw_x86_64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=x86_64" \
   artifact "rocksdb-mingw-x86_64.zip" \
   cmake_flags "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64" \
-  requires_konan_mode always
 
 register_config \
   mingwArm64 \
   host LINUX \
-  konan_target "" \
   output_dir mingw_arm64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=arm64" \
   artifact "rocksdb-mingw-arm64.zip" \
   cmake_flags "-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=ARM64" \
-  requires_konan_mode never
 
 register_config \
   macosX64 \
   host MAC \
-  konan_target macos_x64 \
   output_dir macos_x86_64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=macos --arch=x86_64" \
@@ -120,12 +107,10 @@ register_config \
   apple_arch x86_64 \
   apple_target "x86_64-apple-macos11.0" \
   cmake_flags "-DPLATFORM=OS64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
-  requires_konan_mode always
 
 register_config \
   macosArm64 \
   host MAC \
-  konan_target macos_arm64 \
   output_dir macos_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=macos --arch=arm64" \
@@ -133,12 +118,10 @@ register_config \
   apple_arch arm64 \
   apple_target "arm64-apple-macos11.0" \
   cmake_flags "-DPLATFORM=MAC -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0" \
-  requires_konan_mode always
 
 register_config \
   iosArm64 \
   host MAC \
-  konan_target ios_arm64 \
   output_dir ios_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=ios --arch=arm64" \
@@ -147,12 +130,10 @@ register_config \
   apple_target "arm64-apple-ios13.0" \
   apple_sdk iphoneos \
   cmake_flags "-DPLATFORM=OS64" \
-  requires_konan_mode always
 
 register_config \
   iosSimulatorArm64 \
   host MAC \
-  konan_target ios_simulator_arm64 \
   output_dir ios_simulator_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=ios --simulator --arch=arm64" \
@@ -161,12 +142,10 @@ register_config \
   apple_target "arm64-apple-ios13.0-simulator" \
   apple_sdk iphonesimulator \
   cmake_flags "-DPLATFORM=SIMULATORARM64" \
-  requires_konan_mode always
 
 register_config \
   watchosArm64 \
   host MAC \
-  konan_target watchos_arm64 \
   output_dir watchos_arm64_32 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=watchos --arch=arm64_32" \
@@ -175,12 +154,10 @@ register_config \
   apple_target "arm64_32-apple-watchos7.0" \
   apple_sdk watchos \
   cmake_flags "-DPLATFORM=WATCHOS -DARCHS=arm64_32 -DDEPLOYMENT_TARGET=7.0" \
-  requires_konan_mode always
 
 register_config \
   watchosDeviceArm64 \
   host MAC \
-  konan_target watchos_device_arm64 \
   output_dir watchos_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=watchos --arch=arm64" \
@@ -189,12 +166,10 @@ register_config \
   apple_target "arm64-apple-watchos7.0" \
   apple_sdk watchos \
   cmake_flags "-DPLATFORM=WATCHOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=7.0" \
-  requires_konan_mode always
 
 register_config \
   watchosSimulatorArm64 \
   host MAC \
-  konan_target watchos_simulator_arm64 \
   output_dir watchos_simulator_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=watchos --simulator --arch=arm64" \
@@ -203,12 +178,10 @@ register_config \
   apple_target "arm64-apple-watchos7.0-simulator" \
   apple_sdk watchsimulator \
   cmake_flags "-DPLATFORM=SIMULATORARM64_WATCHOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=7.0" \
-  requires_konan_mode always
 
 register_config \
   tvosArm64 \
   host MAC \
-  konan_target tvos_arm64 \
   output_dir tvos_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=tvos --arch=arm64" \
@@ -217,12 +190,10 @@ register_config \
   apple_target "arm64-apple-tvos13.0" \
   apple_sdk appletvos \
   cmake_flags "-DPLATFORM=TVOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=13.0" \
-  requires_konan_mode always
 
 register_config \
   tvosSimulatorArm64 \
   host MAC \
-  konan_target tvos_simulator_arm64 \
   output_dir tvos_simulator_arm64 \
   build_script buildRocksdbApple.sh \
   build_args "--platform=tvos --simulator --arch=arm64" \
@@ -231,47 +202,38 @@ register_config \
   apple_target "arm64-apple-tvos13.0-simulator" \
   apple_sdk appletvsimulator \
   cmake_flags "-DPLATFORM=SIMULATORARM64_TVOS -DARCHS=arm64 -DDEPLOYMENT_TARGET=13.0" \
-  requires_konan_mode always
 
 register_config \
   androidNativeArm32 \
   host "LINUX|MAC" \
-  konan_target android_arm32 \
   output_dir android_arm32 \
   build_script buildRocksdbAndroid.sh \
   build_args "--arch=arm32" \
   artifact "rocksdb-android-arm32.zip" \
-  requires_konan_mode always
 
 register_config \
   androidNativeArm64 \
   host "LINUX|MAC" \
-  konan_target android_arm64 \
   output_dir android_arm64 \
   build_script buildRocksdbAndroid.sh \
   build_args "--arch=arm64" \
   artifact "rocksdb-android-arm64.zip" \
-  requires_konan_mode always
 
 register_config \
   androidNativeX86 \
   host "LINUX|MAC" \
-  konan_target android_x86 \
   output_dir android_x86 \
   build_script buildRocksdbAndroid.sh \
   build_args "--arch=x86" \
   artifact "rocksdb-android-x86.zip" \
-  requires_konan_mode always
 
 register_config \
   androidNativeX64 \
   host "LINUX|MAC" \
-  konan_target android_x64 \
   output_dir android_x64 \
   build_script buildRocksdbAndroid.sh \
   build_args "--arch=x64" \
   artifact "rocksdb-android-x64.zip" \
-  requires_konan_mode always
 
 default_configs_for_host() {
   case "$1" in
@@ -347,10 +309,6 @@ config_host() {
   config_field "$1" host
 }
 
-config_konan_target() {
-  config_field "$1" konan_target
-}
-
 config_output_directory() {
   config_field "$1" output_dir
 }
@@ -415,58 +373,6 @@ config_extra_cmakeflags() {
 
 config_artifact_name() {
   config_field "$1" artifact
-}
-
-requires_konan() {
-  local config="$1"
-  local mode
-  mode="$(config_field "$config" requires_konan_mode)"
-  case "${mode:-always}" in
-    never)
-      echo "false"
-      ;;
-    always)
-      echo "true"
-      ;;
-    auto)
-      if [[ "$(config_supports_host "$config" "$HOST_PLATFORM")" != "true" ]]; then
-        echo "true"
-        return
-      fi
-      local required_arch
-      required_arch="$(config_field "$config" auto_requires_host_arch)"
-      case "$required_arch" in
-        arm)
-          if is_host_arm_arch; then
-            echo "false"
-          else
-            echo "true"
-          fi
-          ;;
-        "")
-          echo "false"
-          ;;
-        *)
-          echo "true"
-          ;;
-      esac
-      ;;
-    *)
-      echo "true"
-      ;;
-  esac
-}
-
-prepare_konan() {
-  local config="$1"
-  local target
-  target="$(config_konan_target "$config")"
-  if [[ -z "$target" ]]; then
-    return
-  fi
-  if [[ "$(requires_konan "$config")" == "true" ]]; then
-    bash "$PROJECT_ROOT/scripts/install-konan.sh" "--target=${target}" "--konan-version=${KONAN_VERSION}"
-  fi
 }
 
 prepare_headers() {
@@ -576,7 +482,6 @@ build_config() {
     fail "Skipping $config because it requires host $(config_host "$config")"
   fi
 
-  prepare_konan "$config"
   build_dependencies "$config"
   run_build_script "$config"
   package_artifacts "$config"
@@ -587,15 +492,6 @@ main() {
   local positional=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --konan-version)
-        [[ $# -ge 2 ]] || fail "--konan-version requires a value"
-        KONAN_VERSION="$2"
-        shift 2
-        ;;
-      --konan-version=*)
-        KONAN_VERSION="${1#*=}"
-        shift
-        ;;
       --list)
         list_configs
         exit 0

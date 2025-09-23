@@ -173,10 +173,13 @@ set -e
 
 if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
   echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+  exit 0
 elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
   echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+  exit 0
 elif grep -q "up-to-date" "$BUILD_LOG"; then
   echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
+  exit 0
 elif [[ $build_status -ne 0 ]]; then
   echo "** BUILD FAILED for ${BUILD_DIR} **"
   echo "—— Tail of build log ————————————————"
@@ -190,5 +193,3 @@ else
   echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
   exit 1
 fi
-
-echo "✅ RocksDB build completed successfully for $PLATFORM"

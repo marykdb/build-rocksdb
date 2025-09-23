@@ -36,6 +36,10 @@ get_num_cores() {
 }
 
 HOST_OS="$(uname -s)"
+if [[ "$HOST_OS" != "Linux" ]]; then
+  echo "Error: buildRocksdbLinux.sh must run on a Linux host." >&2
+  exit 1
+fi
 BUILD_SUBDIR=""
 CC_BIN="${CC:-}"
 CXX_BIN="${CXX:-}"
@@ -50,43 +54,19 @@ case "$ARCH" in
     EXTRA_C_FLAGS+=" -march=armv8-a"
     CMAKE_SYSTEM_PROCESSOR="aarch64"
     if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
-      if [[ "$HOST_OS" == "Linux" ]]; then
-        CC_BIN="${CC_BIN:-$(command -v aarch64-linux-gnu-gcc 2>/dev/null || true)}"
-        CXX_BIN="${CXX_BIN:-$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)}"
-        AR_BIN="${AR_BIN:-$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)}"
-        RANLIB_BIN="${RANLIB_BIN:-$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)}"
-      else
-        konan_deps_dir="${HOME}/.konan/dependencies"
-        konan_cc=("${konan_deps_dir}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-gcc)
-        konan_cxx=("${konan_deps_dir}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-g++)
-        if [[ -z "$CC_BIN" && -x "${konan_cc[0]}" ]]; then
-          CC_BIN="${konan_cc[0]}"
-        fi
-        if [[ -z "$CXX_BIN" && -x "${konan_cxx[0]}" ]]; then
-          CXX_BIN="${konan_cxx[0]}"
-        fi
-      fi
+      CC_BIN="${CC_BIN:-$(command -v aarch64-linux-gnu-gcc 2>/dev/null || true)}"
+      CXX_BIN="${CXX_BIN:-$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)}"
+      AR_BIN="${AR_BIN:-$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)}"
+      RANLIB_BIN="${RANLIB_BIN:-$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)}"
     fi
     ;;
   x86_64)
     BUILD_SUBDIR="linux_x86_64"
-    EXTRA_C_FLAGS+=" -march=x86-64"
+    EXTRA_C_FLAGS+=" -m64"
     CMAKE_SYSTEM_PROCESSOR="x86_64"
     if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
-      if [[ "$HOST_OS" == "Linux" ]]; then
-        CC_BIN="${CC_BIN:-$(command -v gcc 2>/dev/null || true)}"
-        CXX_BIN="${CXX_BIN:-$(command -v g++ 2>/dev/null || true)}"
-      else
-        konan_deps_dir="${HOME}/.konan/dependencies"
-        konan_cc=("${konan_deps_dir}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-gcc)
-        konan_cxx=("${konan_deps_dir}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-g++)
-        if [[ -z "$CC_BIN" && -x "${konan_cc[0]}" ]]; then
-          CC_BIN="${konan_cc[0]}"
-        fi
-        if [[ -z "$CXX_BIN" && -x "${konan_cxx[0]}" ]]; then
-          CXX_BIN="${konan_cxx[0]}"
-        fi
-      fi
+      CC_BIN="${CC_BIN:-$(command -v gcc 2>/dev/null || true)}"
+      CXX_BIN="${CXX_BIN:-$(command -v g++ 2>/dev/null || true)}"
     fi
     ;;
   *)
@@ -198,10 +178,13 @@ set -e
 
 if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
   echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+  exit 0
 elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
   echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+  exit 0
 elif grep -q "up-to-date" "$BUILD_LOG"; then
   echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
+  exit 0
 elif [[ $build_status -ne 0 ]]; then
   echo "** BUILD FAILED for ${BUILD_DIR} **"
   echo "—— Tail of build log ————————————————"
@@ -215,5 +198,3 @@ else
   echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
   exit 1
 fi
-
-echo "✅ RocksDB build completed successfully for $PLATFORM"

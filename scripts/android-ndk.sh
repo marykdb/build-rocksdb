@@ -63,18 +63,6 @@ _android_find_ndk_root() {
     fi
   done
 
-  local konan_dir="${HOME}/.konan/dependencies"
-  candidate=$(_android_latest_directory "$konan_dir" "android-ndk-*")
-  if [[ -n "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return 0
-  fi
-
-  candidate=$(_android_latest_directory "$konan_dir" "target-toolchain-*-android_ndk")
-  if [[ -n "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return 0
-  fi
 
   return 1
 }
@@ -94,7 +82,7 @@ _android_download_ndk() {
       ;;
   esac
 
-  local base_dir="${HOME}/.konan/dependencies"
+  local base_dir="${ANDROID_NDK_CACHE_DIR:-$HOME/.android/ndk}"
   local archive_name="android-ndk-${version}-${host_tag}.zip"
   local archive_path="${base_dir}/${archive_name}"
   local ndk_dir="${base_dir}/android-ndk-${version}"

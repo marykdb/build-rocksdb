@@ -1,7 +1,2 @@
 # Project exclude paths
 build
-
-xcodeBuild
-local.properties
-/.kotlin/
-/lib/
