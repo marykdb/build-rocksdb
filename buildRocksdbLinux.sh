@@ -47,27 +47,29 @@ AR_BIN="${AR:-}"
 RANLIB_BIN="${RANLIB:-}"
 EXTRA_C_FLAGS="-fPIC"
 CMAKE_SYSTEM_PROCESSOR=""
+DEFAULT_CC=""
+DEFAULT_CXX=""
+DEFAULT_AR=""
+DEFAULT_RANLIB=""
 
 case "$ARCH" in
   arm64)
     BUILD_SUBDIR="linux_arm64"
     EXTRA_C_FLAGS+=" -march=armv8-a"
     CMAKE_SYSTEM_PROCESSOR="aarch64"
-    if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
-      CC_BIN="${CC_BIN:-$(command -v aarch64-linux-gnu-gcc 2>/dev/null || true)}"
-      CXX_BIN="${CXX_BIN:-$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)}"
-      AR_BIN="${AR_BIN:-$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)}"
-      RANLIB_BIN="${RANLIB_BIN:-$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)}"
-    fi
+    DEFAULT_CC="aarch64-linux-gnu-gcc"
+    DEFAULT_CXX="aarch64-linux-gnu-g++"
+    DEFAULT_AR="aarch64-linux-gnu-ar"
+    DEFAULT_RANLIB="aarch64-linux-gnu-ranlib"
     ;;
   x86_64)
     BUILD_SUBDIR="linux_x86_64"
     EXTRA_C_FLAGS+=" -m64"
     CMAKE_SYSTEM_PROCESSOR="x86_64"
-    if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
-      CC_BIN="${CC_BIN:-$(command -v gcc 2>/dev/null || true)}"
-      CXX_BIN="${CXX_BIN:-$(command -v g++ 2>/dev/null || true)}"
-    fi
+    DEFAULT_CC="gcc"
+    DEFAULT_CXX="g++"
+    DEFAULT_AR="ar"
+    DEFAULT_RANLIB="ranlib"
     ;;
   *)
     echo "Unsupported architecture: $ARCH" >&2
@@ -75,16 +77,33 @@ case "$ARCH" in
     ;;
  esac
 
+resolve_tool() {
+  local current="$1"
+  local fallback="$2"
+  if [[ -n "$current" ]]; then
+    echo "$current"
+    return
+  fi
+  if [[ -n "$fallback" ]]; then
+    command -v "$fallback" 2>/dev/null || true
+  else
+    echo ""
+  fi
+}
+
+CC_BIN="$(resolve_tool "$CC_BIN" "$DEFAULT_CC")"
+CXX_BIN="$(resolve_tool "$CXX_BIN" "$DEFAULT_CXX")"
+AR_BIN="$(resolve_tool "$AR_BIN" "$DEFAULT_AR")"
+RANLIB_BIN="$(resolve_tool "$RANLIB_BIN" "$DEFAULT_RANLIB")"
+
 if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
   echo "Missing cross-compilation toolchain for linux_${ARCH}." >&2
   exit 1
 fi
 
-if [[ -z "$AR_BIN" ]]; then
-  AR_BIN="ar"
-fi
-if [[ -z "$RANLIB_BIN" ]]; then
-  RANLIB_BIN="ranlib"
+if [[ -z "$AR_BIN" || -z "$RANLIB_BIN" ]]; then
+  echo "Missing archiver toolchain for linux_${ARCH}." >&2
+  exit 1
 fi
 
 BUILD_DIR="build/lib/${BUILD_SUBDIR}"
