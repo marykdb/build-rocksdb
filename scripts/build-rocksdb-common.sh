@@ -141,13 +141,13 @@ build_common::run_cmake_build() {
   local build_dir="$1"
   local parallel_jobs="$2"
   local target="${3:-rocksdb}"
-  shift 3
-  local -a extra_args=("$@")
+  (( $# >= 3 )) && shift 3
+  (( $# == 2 )) && shift 2
   local build_log="${build_dir}/build.log"
 
   echo "Building RocksDB with CMake..."
   set +e
-  cmake --build "$build_dir" --config Release --target "$target" --parallel "$parallel_jobs" "${extra_args[@]}" >"$build_log" 2>&1
+  cmake --build "$build_dir" --config Release --target "$target" --parallel "$parallel_jobs" 2>&1
   local build_status=$?
   set -e
 
@@ -162,12 +162,6 @@ build_common::run_cmake_build() {
     return 0
   elif [[ $build_status -ne 0 ]]; then
     echo "** BUILD FAILED for ${build_dir} **"
-    echo "—— Tail of build log ————————————————"
-    tail -n 400 "$build_log" || true
-    echo "———————————————————————————————————"
-    echo "Full log at: $build_log"
-    echo "Contents of ${build_dir} after failure:" >&2
-    find "$build_dir" -maxdepth 2 -type f -print >&2 || true
     return 1
   else
     echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $build_log) **"
