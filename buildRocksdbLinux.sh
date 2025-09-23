@@ -1,145 +1,207 @@
 #!/usr/bin/env bash
 
-ARCH="" # e.g. arm64, x86_64, etc.
+set -euo pipefail
 
+ARCH=""
 for arg in "$@"; do
   case $arg in
     --arch=*)
       ARCH="${arg#*=}"
       ;;
     *)
-      echo "Unknown option: $arg"
+      echo "Unknown option: $arg" >&2
       exit 1
       ;;
   esac
 done
 
-# Validate
-if [ -z "$ARCH" ]; then
-  echo "Usage: $0 --arch=<arm64|x86_64>"
+if [[ -z "$ARCH" ]]; then
+  echo "Usage: $0 --arch=<arm64|x86_64>" >&2
   exit 1
 fi
 
-echo "Building RocksDB for $ARCH..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+REPO_ROOT="$SCRIPT_DIR"
 
-# Optional: navigate to the rocksdb directory
-cd "rocksdb" || { echo "Failed to navigate to rocksdb"; exit 1; }
-
-# Simple function to check build output
-check_build() {
-  local output="$1"
-  local output_dir="$2"
-
-  if echo "$output" | grep -q "AR       ${output_dir}/librocksdb.a"; then
-      echo "** BUILD SUCCEEDED for $ARCH **"
-  elif echo "$output" | grep -q "make: Nothing to be done for 'static_lib'."; then
-      echo "** BUILD NOT NEEDED for $ARCH (Already up to date) **"
+get_num_cores() {
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif command -v sysctl >/dev/null 2>&1; then
+    sysctl -n hw.logicalcpu 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4
   else
-      echo "** BUILD FAILED for $ARCH **"
-      echo "$output"
-      exit 1
+    echo "Error: Unable to determine the number of CPU cores for parallel build." >&2
+    exit 1
   fi
 }
 
-EXTRA_FLAGS="-I../build/include -I../build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD "
 HOST_OS="$(uname -s)"
-ar_bin=""
-ranlib_bin=""
-MAKE_JOBS_DEFAULT="$(nproc)"
+BUILD_SUBDIR=""
+CC_BIN="${CC:-}"
+CXX_BIN="${CXX:-}"
+AR_BIN="${AR:-}"
+RANLIB_BIN="${RANLIB:-}"
+EXTRA_C_FLAGS="-fPIC"
+CMAKE_SYSTEM_PROCESSOR=""
 
-if [[ "$ARCH" == "arm64" ]]; then
-  folder="linux_arm64"
-  if [[ "$HOST_OS" == "Linux" ]]; then
-    cc="${cc:-$(command -v aarch64-linux-gnu-gcc 2>/dev/null || true)}"
-    cxx="${cxx:-$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)}"
-    ar_bin="${ar_bin:-$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)}"
-    ranlib_bin="${ranlib_bin:-$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)}"
-    if [[ -z "$cc" || -z "$cxx" ]]; then
-      echo "Missing aarch64-linux-gnu cross compiler. Install it or run on a host with Konan installed." >&2
-      exit 1
-    fi
-  else
-    konan_deps_dir="${HOME}/.konan/dependencies"
-    if [[ -d "$konan_deps_dir" ]]; then
-      konan_cc=("${konan_deps_dir}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-gcc)
-      konan_cxx=("${konan_deps_dir}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-g++)
-      if [[ -x "${konan_cc[0]}" && -x "${konan_cxx[0]}" ]]; then
-        cc="${konan_cc[0]}"
-        cxx="${konan_cxx[0]}"
+case "$ARCH" in
+  arm64)
+    BUILD_SUBDIR="linux_arm64"
+    EXTRA_C_FLAGS+=" -march=armv8-a"
+    CMAKE_SYSTEM_PROCESSOR="aarch64"
+    if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
+      if [[ "$HOST_OS" == "Linux" ]]; then
+        CC_BIN="${CC_BIN:-$(command -v aarch64-linux-gnu-gcc 2>/dev/null || true)}"
+        CXX_BIN="${CXX_BIN:-$(command -v aarch64-linux-gnu-g++ 2>/dev/null || true)}"
+        AR_BIN="${AR_BIN:-$(command -v aarch64-linux-gnu-ar 2>/dev/null || true)}"
+        RANLIB_BIN="${RANLIB_BIN:-$(command -v aarch64-linux-gnu-ranlib 2>/dev/null || true)}"
+      else
+        konan_deps_dir="${HOME}/.konan/dependencies"
+        konan_cc=("${konan_deps_dir}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-gcc)
+        konan_cxx=("${konan_deps_dir}"/aarch64-unknown-linux-gnu-gcc-*/bin/aarch64-unknown-linux-gnu-g++)
+        if [[ -z "$CC_BIN" && -x "${konan_cc[0]}" ]]; then
+          CC_BIN="${konan_cc[0]}"
+        fi
+        if [[ -z "$CXX_BIN" && -x "${konan_cxx[0]}" ]]; then
+          CXX_BIN="${konan_cxx[0]}"
+        fi
       fi
     fi
-    if [[ -z "${cc:-}" || -z "${cxx:-}" ]]; then
-      echo "Missing Kotlin/Native cross-compilation toolchain for linux_arm64." >&2
-      exit 1
-    fi
-  fi
-  EXTRA_FLAGS+="-march=armv8-a"
-else
-  folder="linux_x86_64"
-  if [[ "$HOST_OS" == "Linux" ]]; then
-    cc="${cc:-$(command -v gcc)}"
-    cxx="${cxx:-$(command -v g++)}"
-  else
-    konan_deps_dir="${HOME}/.konan/dependencies"
-    if [[ -d "$konan_deps_dir" ]]; then
-      konan_cc=("${konan_deps_dir}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-gcc)
-      konan_cxx=("${konan_deps_dir}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-g++)
-      if [[ -x "${konan_cc[0]}" && -x "${konan_cxx[0]}" ]]; then
-        cc="${konan_cc[0]}"
-        cxx="${konan_cxx[0]}"
+    ;;
+  x86_64)
+    BUILD_SUBDIR="linux_x86_64"
+    EXTRA_C_FLAGS+=" -march=x86-64"
+    CMAKE_SYSTEM_PROCESSOR="x86_64"
+    if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
+      if [[ "$HOST_OS" == "Linux" ]]; then
+        CC_BIN="${CC_BIN:-$(command -v gcc 2>/dev/null || true)}"
+        CXX_BIN="${CXX_BIN:-$(command -v g++ 2>/dev/null || true)}"
+      else
+        konan_deps_dir="${HOME}/.konan/dependencies"
+        konan_cc=("${konan_deps_dir}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-gcc)
+        konan_cxx=("${konan_deps_dir}"/x86_64-unknown-linux-gnu-gcc-*/bin/x86_64-unknown-linux-gnu-g++)
+        if [[ -z "$CC_BIN" && -x "${konan_cc[0]}" ]]; then
+          CC_BIN="${konan_cc[0]}"
+        fi
+        if [[ -z "$CXX_BIN" && -x "${konan_cxx[0]}" ]]; then
+          CXX_BIN="${konan_cxx[0]}"
+        fi
       fi
     fi
-    if [[ -z "${cc:-}" || -z "${cxx:-}" ]]; then
-      echo "Missing Kotlin/Native cross-compilation toolchain for linux_x86_64." >&2
-      exit 1
-    fi
-  fi
-  EXTRA_FLAGS+="-march=x86-64"
+    ;;
+  *)
+    echo "Unsupported architecture: $ARCH" >&2
+    exit 1
+    ;;
+ esac
+
+if [[ -z "$CC_BIN" || -z "$CXX_BIN" ]]; then
+  echo "Missing cross-compilation toolchain for linux_${ARCH}." >&2
+  exit 1
 fi
 
-if [[ -z "${ROCKSDB_MAKE_JOBS:-}" ]]; then
-  if [[ "$ARCH" == "arm64" ]]; then
-    if (( MAKE_JOBS_DEFAULT > 2 )); then
-      MAKE_JOBS_DEFAULT=2
-    fi
-  fi
-  MAKE_JOBS="$MAKE_JOBS_DEFAULT"
-else
-  MAKE_JOBS="$ROCKSDB_MAKE_JOBS"
+if [[ -z "$AR_BIN" ]]; then
+  AR_BIN="ar"
+fi
+if [[ -z "$RANLIB_BIN" ]]; then
+  RANLIB_BIN="ranlib"
 fi
 
-# Check if the build output already exists
-OUTPUT_DIR="../build/lib/$folder"
+OBJ_DIR="build/lib/${BUILD_SUBDIR}"
+SNAPPY_PREFIX="${OBJ_DIR}/deps/snappy"
+SNAPPY_CMAKE_DIR="${SNAPPY_PREFIX}/lib/cmake/Snappy"
+DEPENDENCY_HEADERS_DIR="${REPO_ROOT}/build/include/dependencies"
+DEPENDENCY_INCLUDE_ROOT="${REPO_ROOT}/build/include"
+DEPENDENCY_LIB_DIR="${REPO_ROOT}/${OBJ_DIR}"
+SNAPPY_CONFIG_PATH="${REPO_ROOT}/${SNAPPY_CMAKE_DIR}/SnappyConfig.cmake"
 
-# Ensure the output directory exists before building
-mkdir -p "$OUTPUT_DIR"
+if [[ ! -f "${SNAPPY_CONFIG_PATH}" ]]; then
+  echo "Warning: Expected Snappy CMake package at ${SNAPPY_CONFIG_PATH} not found. The build may fail if dependencies have not been prepared." >&2
+fi
 
-# Check if the build output already exists
-if [ -f "${OUTPUT_DIR}/librocksdb.a" ]; then
-  echo "** BUILD SKIPPED: ${OUTPUT_DIR}/librocksdb.a already exists **"
+if [[ -f "${OBJ_DIR}/librocksdb.a" ]]; then
+  echo "** BUILD SKIPPED: ${OBJ_DIR}/librocksdb.a already exists **"
   exit 0
 fi
 
-if [[ "$(uname -s)" == "Linux" ]]; then
-  output=$(
-    make -j"$MAKE_JOBS" \
-      LIB_MODE=static \
-      LIBNAME="${OUTPUT_DIR}/librocksdb" \
-      DEBUG_LEVEL=0 \
-      CC=$cc \
-      CXX=$cxx \
-      AR=${ar_bin:-ar} \
-      RANLIB=${ranlib_bin:-ranlib} \
-      OBJ_DIR="$OUTPUT_DIR" \
-      EXTRA_CXXFLAGS="$EXTRA_FLAGS" \
-      EXTRA_CFLAGS="$EXTRA_FLAGS" \
-      PORTABLE=1 \
-      LD_FLAGS="-lbz2 -lz -lz4 -lsnappy" \
-      static_lib
-  )
+if [[ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]]; then
+  echo "** BUILD SKIPPED: ${OBJ_DIR}/rocksdb-build/librocksdb.a already exists **"
+  exit 0
+fi
 
-  check_build "$output" "$OUTPUT_DIR"
+mkdir -p "$OBJ_DIR"
+
+NUM_CORES="$(get_num_cores)"
+if [[ -n "${ROCKSDB_MAKE_JOBS:-}" ]]; then
+  NUM_CORES="${ROCKSDB_MAKE_JOBS}"
+elif [[ "$ARCH" == "arm64" && "$NUM_CORES" -gt 2 ]]; then
+  NUM_CORES=2
+fi
+
+CMAKE_TOOLCHAIN_ARGS=(-DCMAKE_SYSTEM_NAME=Linux)
+if [[ -n "$CMAKE_SYSTEM_PROCESSOR" ]]; then
+  CMAKE_TOOLCHAIN_ARGS+=(-DCMAKE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}")
+fi
+
+CMAKE_ARGS=(
+  -S "rocksdb"
+  -B "$OBJ_DIR"
+  "${CMAKE_TOOLCHAIN_ARGS[@]}"
+  -DCMAKE_C_COMPILER="${CC_BIN}"
+  -DCMAKE_CXX_COMPILER="${CXX_BIN}"
+  -DCMAKE_AR="${AR_BIN}"
+  -DCMAKE_RANLIB="${RANLIB_BIN}"
+  -DCMAKE_PREFIX_PATH="${REPO_ROOT}/${SNAPPY_PREFIX}"
+  -DSnappy_DIR="${REPO_ROOT}/${SNAPPY_CMAKE_DIR}"
+  -DCMAKE_INCLUDE_PATH="${DEPENDENCY_INCLUDE_ROOT};${DEPENDENCY_HEADERS_DIR}"
+  -DCMAKE_LIBRARY_PATH="${DEPENDENCY_LIB_DIR}"
+  -DZLIB_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
+  -DZLIB_LIBRARY="${DEPENDENCY_LIB_DIR}/libz.a"
+  -DZLIB_USE_STATIC_LIBS=ON
+  -DBZIP2_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
+  -DBZIP2_LIBRARIES="${DEPENDENCY_LIB_DIR}/libbz2.a"
+  -DLZ4_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
+  -DLZ4_LIBRARY="${DEPENDENCY_LIB_DIR}/liblz4.a"
+  -DZSTD_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
+  -DZSTD_LIBRARY="${DEPENDENCY_LIB_DIR}/libzstd.a"
+  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
+  -DCMAKE_C_FLAGS="${EXTRA_C_FLAGS}"
+  -DCMAKE_CXX_FLAGS="${EXTRA_C_FLAGS}"
+  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_INSTALL_PREFIX="${OBJ_DIR}"
+  -DPORTABLE=1
+  -DWITH_GFLAGS=OFF
+  -DWITH_SNAPPY=ON
+  -DWITH_LZ4=ON
+  -DWITH_ZLIB=ON
+  -DWITH_ZSTD=ON
+  -DWITH_BZ2=ON
+  -DROCKSDB_BUILD_SHARED=OFF
+  -DROCKSDB_BUILD_STATIC=ON
+  -DWITH_TESTS=OFF
+  -DWITH_BENCHMARK_TOOLS=OFF
+  -DWITH_TOOLS=OFF
+  -DWITH_JNI=OFF
+  -DWITH_JEMALLOC=OFF
+  -DFAIL_ON_WARNINGS=OFF
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+)
+
+cmake "${CMAKE_ARGS[@]}"
+
+echo "Building RocksDB with CMake..."
+output=$(cmake --build "$OBJ_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" 2>&1)
+
+if [[ -f "${OBJ_DIR}/librocksdb.a" ]]; then
+  echo "** BUILD SUCCEEDED for ${ARCH} **"
+elif [[ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]]; then
+  echo "** BUILD SUCCEEDED for ${ARCH} **"
+elif echo "$output" | grep -q "up-to-date"; then
+  echo "** BUILD NOT NEEDED for ${ARCH} (Already up to date) **"
 else
-  echo "Should only build on linux"
+  echo "** BUILD FAILED for ${ARCH} **"
+  echo "$output"
+  echo "Contents of ${OBJ_DIR} after failure:" >&2
+  find "$OBJ_DIR" -maxdepth 2 -type f -print >&2 || true
   exit 1
 fi
