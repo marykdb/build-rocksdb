@@ -9,17 +9,6 @@ permissions:
   contents: write
 
 jobs:
-#  runs-on: ubuntu-latest
-#    container: ubuntu:20.04   # clean environment; gcc-8 available
-#    steps:
-#      - name: Prepare apt
-#        run: |
-#          apt-get update
-#          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-#            git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
-#            pkg-config unzip zip
-#      - uses: actions/checkout@v4
-#
   linux-x64:
     name: Linux x86_64
     runs-on: ubuntu-latest

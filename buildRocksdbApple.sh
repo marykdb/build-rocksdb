@@ -99,7 +99,7 @@ fi
 SIM_SUFFIX=$([[ "$SIMULATOR" == true ]] && echo "_simulator" || echo "")
 BUILD_DIR="${REPO_ROOT}/build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
 
-EXTRA_C_FLAGS="${MIN_FLAG} ${TARGET_TRIPLE} -isysroot ${SDK_PATH} -I${REPO_ROOT}/build/include -I${REPO_ROOT}/build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
+EXTRA_C_FLAGS="${MIN_FLAG} ${TARGET_TRIPLE} -g0 -ffunction-sections -fdata-sections -isysroot ${SDK_PATH} -I${REPO_ROOT}/build/include -I${REPO_ROOT}/build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_CXX_FLAGS="$EXTRA_C_FLAGS"
 
 # Endianness and libc differences on Apple mobile platforms
@@ -169,6 +169,11 @@ WRAP_CXX
   CXX_BIN="${WRAPPER_DIR}/cxx"
 fi
 
+# Archive and strip tools (prefer Xcode's LLVM variants)
+AR_BIN="${AR:-$(xcrun --sdk "$SDK_NAME" --find llvm-ar 2>/dev/null || command -v ar || true)}"
+RANLIB_BIN="${RANLIB:-$(xcrun --sdk "$SDK_NAME" --find llvm-ranlib 2>/dev/null || command -v ranlib || true)}"
+STRIP_BIN="${STRIP:-$(xcrun --sdk "$SDK_NAME" --find strip 2>/dev/null || true)}"
+
 if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
   echo "** BUILD SKIPPED: ${BUILD_DIR}/librocksdb.a already exists **"
   exit 0
@@ -202,6 +207,9 @@ CMAKE_ARGS=(
   "${CMAKE_TOOLCHAIN_ARGS[@]}"
   -DCMAKE_C_COMPILER="${CC_BIN}"
   -DCMAKE_CXX_COMPILER="${CXX_BIN}"
+  -DCMAKE_AR="${AR_BIN}"
+  -DCMAKE_RANLIB="${RANLIB_BIN}"
+  -DCMAKE_STRIP="${STRIP_BIN}"
   -DCMAKE_PREFIX_PATH="${SNAPPY_PREFIX}"
   -DSnappy_DIR="${SNAPPY_CMAKE_DIR}"
   -DCMAKE_INCLUDE_PATH="${DEPENDENCY_INCLUDE_ROOT};${DEPENDENCY_HEADERS_DIR}"
