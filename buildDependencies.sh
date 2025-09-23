@@ -346,6 +346,41 @@ if [[ "${EXTRA_CFLAGS}" == *"-isysroot"* ]]; then
 fi
 
 # ---------------------------------------------------------
+# Helper to compute SHA256 checksums across platforms
+# ---------------------------------------------------------
+compute_sha256() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print tolower($1)}'
+    return
+  fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print tolower($1)}'
+    return
+  fi
+  if command -v certutil >/dev/null 2>&1; then
+    local certutil_path="$file"
+    if command -v cygpath >/dev/null 2>&1; then
+      certutil_path="$(cygpath -w "$file")"
+    fi
+    certutil -hashfile "$certutil_path" SHA256 2>/dev/null | tr -d '\r' | awk 'NR==2 {gsub(/ /, ""); print tolower($0)}'
+    return
+  fi
+  echo ""
+  return 1
+}
+
+# ---------------------------------------------------------
+# Platform helpers
+# ---------------------------------------------------------
+is_windows() {
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------
 # Function to Download and Verify Tarball
 # ---------------------------------------------------------
 download_and_verify() {
@@ -377,7 +412,11 @@ download_and_verify() {
 
   echo "Verifying ${name}-${version}..."
   local sha256_actual
-  sha256_actual="$(shasum -a 256 "${target_path}" | awk '{print $1}')"
+  sha256_actual="$(compute_sha256 "${target_path}")"
+  if [[ -z "${sha256_actual}" ]]; then
+    echo "Error: unable to compute SHA256 for ${tarball} (missing shasum/sha256sum/certutil)" >&2
+    exit 1
+  fi
   if [[ "${sha256}" != "${sha256_actual}" ]]; then
     echo "Error: ${tarball} checksum mismatch!" >&2
     echo "  expected: ${sha256}" >&2
@@ -395,7 +434,7 @@ build_zlib() {
   local cflags="${OPT_CFLAGS} -DNO_GZCOMPRESS -DNO_GZIP"
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
 
-  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
+  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
 
   local -a configure_env=(
@@ -440,7 +479,7 @@ build_zlib() {
 build_bzip2() {
   local tarball="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}"
-  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
+  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
@@ -458,7 +497,13 @@ build_bzip2() {
 build_zstd() {
   local tarball="${DOWNLOAD_DIR}/zstd-${ZSTD_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/zstd-${ZSTD_VER}"
-  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
+  if is_windows; then
+    # On Windows, bsdtar/GNU tar may fail creating symlinks inside zstd tests.
+    # We don't need tests to build the static library, so exclude them.
+    tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --wildcards --exclude='*/tests/*' --no-same-owner --no-same-permissions > /dev/null
+  else
+    tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
+  fi
   pushd "${src_dir}/lib" > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
@@ -481,9 +526,9 @@ build_snappy() {
   local src_dir="${DOWNLOAD_DIR}/snappy-${SNAPPY_VER}"
   local install_prefix="${OUTPUT_DIR}/deps/snappy"
 
-  rm -rf $src_dir
+  rm -rf "$src_dir"
 
-  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}"  > /dev/null
+  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
 
   mkdir -p "${install_prefix}"
@@ -492,7 +537,7 @@ build_snappy() {
     EXTRA_CMAKEFLAGS+=" -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}"
   else
     local toolchain_file="toolchain.cmake"
-    echo "set(CMAKE_C_FLAGS \"\${CMAKE_CXX_FLAGS} ${EXTRA_CFLAGS}\")" > "${toolchain_file}"
+    echo "set(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}\")" > "${toolchain_file}"
     echo "set(CMAKE_CXX_FLAGS \"\${CMAKE_CXX_FLAGS} ${EXTRA_CXXFLAGS}\")" >> "${toolchain_file}"
     echo "set(CMAKE_POSITION_INDEPENDENT_CODE ON)" >> "${toolchain_file}"
     echo "set(CMAKE_BUILD_TYPE Release)" >> "${toolchain_file}"
@@ -500,7 +545,7 @@ build_snappy() {
     echo "set(CMAKE_CXX_COMPILER_WORKS ON)" >> "${toolchain_file}"
     echo "set(CMAKE_16BIT_TYPE \"unsigned long\")" >> "${toolchain_file}"
 
-    EXTRA_CMAKEFLAGS+=""" -DCMAKE_C_COMPILER=$CC -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_TOOLCHAIN_FILE=$toolchain_file"""
+    EXTRA_CMAKEFLAGS+=" -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_TOOLCHAIN_FILE=${toolchain_file}"
     if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
       EXTRA_CMAKEFLAGS+=" -DCMAKE_SYSTEM_NAME=Windows"
       EXTRA_CMAKEFLAGS+=" -DSNAPPY_IS_BIG_ENDIAN=0"
@@ -516,19 +561,32 @@ build_snappy() {
         -DBUILD_SHARED_LIBS=OFF \
         ${EXTRA_CMAKEFLAGS} \
         -DCMAKE_INSTALL_PREFIX="${install_prefix}" \
-        -DCMAKE_C_FLAGS="${EXTRA_CFLAGS}" \
-        -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS}" \
+        -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" \
+        -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}" \
         -DSNAPPY_BUILD_BENCHMARKS=OFF \
         -DSNAPPY_BUILD_TESTS=OFF \
         -Wno-dev ${PLATFORM_CMAKE_FLAGS} .
 
-  make CC="${CC:-cc}" CXX="${CXX:-c++}" clean > /dev/null
-  make CC="${CC:-cc}" CXX="${CXX:-c++}" \
-    CXXFLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}" CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" ${SNAPPY_MAKE_TARGET} > /dev/null
+  # Use CMake-native build so it works with Ninja/Make/MSBuild
+  cmake --build . --target clean
+  cmake --build . --config Release --target snappy --parallel
   cmake --install . --prefix "${install_prefix}" > /dev/null
   cp "snappy.h" "snappy-stubs-public.h" "${DEPENDENCY_INCLUDE_DIR}/"
-  cp "libsnappy.a" "${OUTPUT_DIR}/"
-  strip_archive "${OUTPUT_DIR}/libsnappy.a"
+  # Prefer installed lib; handle both MinGW (.a) and MSVC (.lib)
+  if [[ -f "${install_prefix}/lib/libsnappy.a" ]]; then
+    cp "${install_prefix}/lib/libsnappy.a" "${OUTPUT_DIR}/"
+    strip_archive "${OUTPUT_DIR}/libsnappy.a"
+  elif [[ -f "${install_prefix}/lib/snappy.lib" ]]; then
+    cp "${install_prefix}/lib/snappy.lib" "${OUTPUT_DIR}/"
+  elif [[ -f "libsnappy.a" ]]; then
+    cp "libsnappy.a" "${OUTPUT_DIR}/"
+    strip_archive "${OUTPUT_DIR}/libsnappy.a"
+  elif [[ -f "snappy.lib" ]]; then
+    cp "snappy.lib" "${OUTPUT_DIR}/"
+  else
+    echo "❌ Could not find built snappy static library" >&2
+    exit 1
+  fi
   popd > /dev/null
   echo "✅ Finished building libsnappy.a into ${OUTPUT_DIR}!"
 }
@@ -541,7 +599,8 @@ build_lz4() {
   local src_dir="${DOWNLOAD_DIR}/lz4-${LZ4_VER}"
 
   echo "Building LZ4 version ${LZ4_VER}..."
-  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" > /dev/null
+  rm -rf "${src_dir}"
+  tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}/lib" > /dev/null
   make CC="${CC:-cc}" clean > /dev/null
 

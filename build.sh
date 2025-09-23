@@ -81,7 +81,7 @@ register_config \
 
 register_config \
   mingwX64 \
-  host LINUX \
+  host "LINUX|WINDOWS" \
   output_dir mingw_x86_64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=x86_64" \
@@ -90,7 +90,7 @@ register_config \
 
 register_config \
   mingwArm64 \
-  host LINUX \
+  host "LINUX|WINDOWS" \
   output_dir mingw_arm64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=arm64" \
@@ -239,6 +239,7 @@ default_configs_for_host() {
   case "$1" in
     LINUX) echo "linuxX64 linuxArm64 mingwX64 mingwArm64" ;;
     MAC) echo "macosX64 macosArm64 iosArm64 iosSimulatorArm64 watchosArm64 watchosDeviceArm64 watchosSimulatorArm64 tvosArm64 tvosSimulatorArm64" ;;
+    WINDOWS) echo "mingwX64 mingwArm64" ;;
     *) echo "" ;;
   esac
 }
@@ -467,7 +468,9 @@ package_artifacts() {
   mkdir -p "$PROJECT_ROOT/build/archives"
   local archive_path="$PROJECT_ROOT/build/archives/${artifact}"
   rm -f "$archive_path"
-  (cd "$staging" && zip -qr "$archive_path" include lib)
+  if ! (cd "$staging" && cmake -E tar cf "$archive_path" --format=zip include lib); then
+    fail "Failed to create archive $archive_path"
+  fi
   trap - RETURN
   rm -rf "$staging"
 }

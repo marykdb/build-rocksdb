@@ -105,6 +105,11 @@ if [[ -n "${CMAKE_TOOLCHAIN_FLAGS:-}" ]]; then
 fi
 
 cmake_args+=(
+  -G "Ninja"
+  -DCMAKE_MAKE_PROGRAM=ninja
+)
+
+cmake_args+=(
   -DCMAKE_C_COMPILER="$CC"
   -DCMAKE_CXX_COMPILER="$CXX"
 )

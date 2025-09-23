@@ -143,15 +143,45 @@ jobs:
 
   mingw-x64:
     name: Windows (MinGW) x86_64
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip mingw-w64
+          choco install -y make ninja
+      - name: Install LLVM MinGW toolchain
+        run: |
+          set -euo pipefail
+          LLVM_MINGW_VERSION=20250910
+          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
+          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
+          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
+          curl -sSL -o "$ARCHIVE_PATH" "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}"
+          TOOLCHAIN_DIR="$PWD/toolchains"
+          mkdir -p "$TOOLCHAIN_DIR"
+          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
+          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
+          import pathlib, sys, zipfile
+
+          archive = pathlib.Path(sys.argv[1])
+          dest = pathlib.Path(sys.argv[2])
+          dest.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(archive) as zf:
+              zf.extractall(dest)
+          PY
+          rm -f "$ARCHIVE_PATH"
+          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
+          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
+            echo "Expected toolchain directory $LLVM_MINGW_ROOT not found" >&2
+            exit 1
+          fi
+          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
+          echo "$LLVM_MINGW_ROOT/bin" >> "$GITHUB_PATH"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - uses: actions/upload-artifact@v4
@@ -161,24 +191,45 @@ jobs:
 
   mingw-arm64:
     name: Windows (MinGW) ARM64
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip clang xz-utils
+          choco install -y make ninja
       - name: Install LLVM MinGW toolchain
         run: |
+          set -euo pipefail
           LLVM_MINGW_VERSION=20250910
-          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-22.04-x86_64
-          curl -sSL -o llvm-mingw.tar.xz "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${LLVM_MINGW_DIST}.tar.xz"
-          mkdir -p "$RUNNER_TEMP/llvm-mingw"
-          tar -xJf llvm-mingw.tar.xz -C "$RUNNER_TEMP/llvm-mingw" --strip-components=1
-          echo "LLVM_MINGW_ROOT=$RUNNER_TEMP/llvm-mingw" >> "$GITHUB_ENV"
-          echo "$RUNNER_TEMP/llvm-mingw/bin" >> "$GITHUB_PATH"
+          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
+          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
+          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
+          curl -sSL -o "$ARCHIVE_PATH" "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}"
+          TOOLCHAIN_DIR="$PWD/toolchains"
+          mkdir -p "$TOOLCHAIN_DIR"
+          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
+          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
+          import pathlib, sys, zipfile
+
+          archive = pathlib.Path(sys.argv[1])
+          dest = pathlib.Path(sys.argv[2])
+          dest.mkdir(parents=True, exist_ok=True)
+          with zipfile.ZipFile(archive) as zf:
+              zf.extractall(dest)
+          PY
+          rm -f "$ARCHIVE_PATH"
+          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
+          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
+            echo "Expected toolchain directory $LLVM_MINGW_ROOT not found" >&2
+            exit 1
+          fi
+          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
+          echo "$LLVM_MINGW_ROOT/bin" >> "$GITHUB_PATH"
       - name: Build Windows ARM64 MinGW package
         run: ./build.sh mingwArm64
       - uses: actions/upload-artifact@v4

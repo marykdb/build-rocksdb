@@ -38,6 +38,10 @@ build_common::default_parallel_jobs() {
       return
     fi
   fi
+  if [[ -n "${NUMBER_OF_PROCESSORS:-}" ]]; then
+    echo "${NUMBER_OF_PROCESSORS}"
+    return
+  fi
   echo 4
 }
 
