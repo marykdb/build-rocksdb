@@ -9,74 +9,72 @@ permissions:
   contents: write
 
 jobs:
+#  runs-on: ubuntu-latest
+#    container: ubuntu:20.04   # clean environment; gcc-8 available
+#    steps:
+#      - name: Prepare apt
+#        run: |
+#          apt-get update
+#          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+#            git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
+#            pkg-config unzip zip
+#      - uses: actions/checkout@v4
+#
   linux-x64:
-    name: Linux x86_64 (old glibc, GCC 8)
-    runs-on: ubuntu-24.04
-    container:
-      image: quay.io/pypa/manylinux2014_x86_64
+    name: Linux x86_64
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Setup toolchain (GCC 8) and build tools
-        shell: bash
+      - name: Prepare apt
         run: |
-          yum -y install epel-release
-          yum -y install devtoolset-8 git make autoconf automake libtool \
-                         which unzip zip curl
-          # manylinux has cmake; if you need newer:
-          yum -y install cmake3 || true
-          alternatives --set cmake /usr/bin/cmake3 || true
-          source /opt/rh/devtoolset-8/enable
-          echo "CC=$(which gcc)" >> $GITHUB_ENV
-          echo "CXX=$(which g++)" >> $GITHUB_ENV
-      - name: Build native dependency
-        shell: bash
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
+            pkg-config build-essential cmake ninja-build autoconf automake libtool unzip zip
+      - name: Select GCC 8
+        run: |
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 \
+            --slave /usr/bin/g++ g++ /usr/bin/g++-8
+          gcc --version
+          g++ --version
+      - name: Build Linux x86_64 package
         env:
-          CC: ${{ env.CC }}
-          CXX: ${{ env.CXX }}
-        run: |
-          source /opt/rh/devtoolset-8/enable
-          export CFLAGS="-O2 -fPIC"
-          export CXXFLAGS="-O2 -fPIC -static-libstdc++ -static-libgcc -D_GLIBCXX_USE_CXX11_ABI=1"
-          export LDFLAGS="-static-libstdc++ -static-libgcc"
-          ./build.sh linuxX64
+          CC: gcc-8
+          CXX: g++-8
+        run: ./build.sh linuxX64
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-linux-x86_64
           path: build/archives/rocksdb-linux-x86_64.zip
 
   linux-arm64:
-    name: Linux aarch64 (old glibc, GCC 8)
+    name: Linux ARM64
     runs-on: ubuntu-24.04-arm64
-    container:
-      image: quay.io/pypa/manylinux2014_aarch64
+    container: ubuntu:20.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Setup toolchain (GCC 8) and build tools
-        shell: bash
+      - name: Prepare apt
         run: |
-          yum -y install epel-release
-          yum -y install devtoolset-8 git make autoconf automake libtool \
-                         which unzip zip curl
-          yum -y install cmake3 || true
-          alternatives --set cmake /usr/bin/cmake3 || true
-          source /opt/rh/devtoolset-8/enable
-          echo "CC=$(which gcc)" >> $GITHUB_ENV
-          echo "CXX=$(which g++)" >> $GITHUB_ENV
-      - name: Build native dependency
-        shell: bash
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
+            pkg-config cmake ninja-build autoconf automake libtool unzip zip
+      - name: Select GCC 8
+        run: |
+          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 \
+            --slave /usr/bin/g++ g++ /usr/bin/g++-8
+          gcc --version
+          g++ --version
+      - name: Build Linux ARM64 package
         env:
-          CC: ${{ env.CC }}
-          CXX: ${{ env.CXX }}
-        run: |
-          source /opt/rh/devtoolset-8/enable
-          export CFLAGS="-O2 -fPIC"
-          export CXXFLAGS="-O2 -fPIC -static-libstdc++ -static-libgcc -D_GLIBCXX_USE_CXX11_ABI=1"
-          export LDFLAGS="-static-libstdc++ -static-libgcc"
-          ./build.sh linuxArm64
+          CC: gcc-8
+          CXX: g++-8
+        run: ./build.sh linuxArm64   # or your KN target name for ARM64
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-linux-arm64
