@@ -102,6 +102,19 @@ BUILD_DIR="${REPO_ROOT}/build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
 EXTRA_C_FLAGS="${MIN_FLAG} ${TARGET_TRIPLE} -isysroot ${SDK_PATH} -I${REPO_ROOT}/build/include -I${REPO_ROOT}/build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_CXX_FLAGS="$EXTRA_C_FLAGS"
 
+# Endianness and libc differences on Apple mobile platforms
+if [[ "$PLATFORM" == "ios" || "$PLATFORM" == "tvos" || "$PLATFORM" == "watchos" ]]; then
+  # Endianness: map glibc-style macros to Clang's Apple macros
+  EXTRA_C_FLAGS+=" -D__BYTE_ORDER=__BYTE_ORDER__ -D__LITTLE_ENDIAN=__ORDER_LITTLE_ENDIAN__"
+  EXTRA_CXX_FLAGS+=" -D__BYTE_ORDER=__BYTE_ORDER__ -D__LITTLE_ENDIAN=__ORDER_LITTLE_ENDIAN__"
+
+  # libc differences on Apple SDKs:
+  # - fread_unlocked is unavailable; use fread instead
+  # - O_DIRECT is unsupported; define to 0 so flags |= O_DIRECT compiles to a no-op
+  EXTRA_C_FLAGS+=" -Dfread_unlocked=fread -DO_DIRECT=0"
+  EXTRA_CXX_FLAGS+=" -Dfread_unlocked=fread -DO_DIRECT=0"
+fi
+
 if [[ "$ARCH" == "arm64_32" ]]; then
   EXTRA_C_FLAGS+=" -Wno-shorten-64-to-32"
   EXTRA_CXX_FLAGS+=" -Wno-shorten-64-to-32"
@@ -198,10 +211,10 @@ CMAKE_ARGS=(
   -DZLIB_USE_STATIC_LIBS=ON
   -DBZIP2_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
   -DBZIP2_LIBRARIES="${DEPENDENCY_LIB_DIR}/libbz2.a"
-  -DLZ4_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DLZ4_LIBRARY="${DEPENDENCY_LIB_DIR}/liblz4.a"
-  -DZSTD_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DZSTD_LIBRARY="${DEPENDENCY_LIB_DIR}/libzstd.a"
+  -Dlz4_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
+  -Dlz4_LIBRARIES="${DEPENDENCY_LIB_DIR}/liblz4.a"
+  -DZSTD_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
+  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
   -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
   -DCMAKE_C_FLAGS="${EXTRA_C_FLAGS}"
   -DCMAKE_CXX_FLAGS="${EXTRA_CXX_FLAGS}"
@@ -228,19 +241,29 @@ CMAKE_ARGS=(
 cmake "${CMAKE_ARGS[@]}"
 
 echo "Building RocksDB with CMake..."
-output=$(cmake --build "$BUILD_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" 2>&1)
+BUILD_LOG="${BUILD_DIR}/build.log"
+set +e
+cmake --build "$BUILD_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" >"$BUILD_LOG" 2>&1
+build_status=$?
+set -e
 
 if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
   echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
 elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
   echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
-elif echo "$output" | grep -q "up-to-date"; then
+elif grep -q "up-to-date" "$BUILD_LOG"; then
   echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
-else
+elif [[ $build_status -ne 0 ]]; then
   echo "** BUILD FAILED for ${BUILD_DIR} **"
-  echo "$output"
+  echo "—— Tail of build log ————————————————"
+  tail -n 400 "$BUILD_LOG" || true
+  echo "———————————————————————————————————"
+  echo "Full log at: $BUILD_LOG"
   echo "Contents of ${BUILD_DIR} after failure:" >&2
   find "$BUILD_DIR" -maxdepth 2 -type f -print >&2 || true
+  exit 1
+else
+  echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
   exit 1
 fi
 

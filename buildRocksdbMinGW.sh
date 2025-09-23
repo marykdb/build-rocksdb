@@ -34,7 +34,7 @@ case "$ARCH" in
     CMAKE_TOOLCHAIN_FLAGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=x86_64"
     EXTRA_C_FLAGS="-march=x86-64 ${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="-march=x86-64 ${WINDOWS_MIN_VERSION_CXX_FLAGS}"
-    OBJ_DIR="build/lib/mingw_x86_64"
+    BUILD_DIR="build/lib/mingw_x86_64"
     ;;
   i686)
     CC="i686-w64-mingw32-gcc"
@@ -42,7 +42,7 @@ case "$ARCH" in
     CMAKE_TOOLCHAIN_FLAGS="-DCMAKE_SYSTEM_NAME=Windows -DCMAKE_SYSTEM_PROCESSOR=i686"
     EXTRA_C_FLAGS="-march=i686 ${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="-march=i686 ${WINDOWS_MIN_VERSION_CXX_FLAGS}"
-    OBJ_DIR="build/lib/mingw_i686"
+    BUILD_DIR="build/lib/mingw_i686"
     ;;
   arm64|aarch64)
     TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
@@ -69,7 +69,7 @@ case "$ARCH" in
     fi
     EXTRA_C_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="${WINDOWS_MIN_VERSION_CXX_FLAGS}"
-    OBJ_DIR="build/lib/mingw_arm64"
+    BUILD_DIR="build/lib/mingw_arm64"
     ;;
   *)
     echo "Unsupported ARCH: $ARCH"
@@ -94,13 +94,13 @@ echo "Compiler: $CC / $CXX"
 # Ensure we run from the repository root so relative paths resolve correctly
 cd "$(dirname "$0")" || { echo "Failed to navigate to repository root"; exit 1; }
 REPO_ROOT="$(pwd)"
-DEPENDENCY_DIR="$OBJ_DIR"
+DEPENDENCY_DIR="$BUILD_DIR"
 SNAPPY_PREFIX="${DEPENDENCY_DIR}/deps/snappy"
 SNAPPY_CMAKE_DIR="${SNAPPY_PREFIX}/lib/cmake/Snappy"
 
 DEPENDENCY_HEADERS_DIR="${REPO_ROOT}/build/include/dependencies"
 DEPENDENCY_INCLUDE_ROOT="${REPO_ROOT}/build/include"
-DEPENDENCY_LIB_DIR="${REPO_ROOT}/${OBJ_DIR}"
+DEPENDENCY_LIB_DIR="${REPO_ROOT}/${BUILD_DIR}"
 
 SNAPPY_CONFIG_PATH="${REPO_ROOT}/${SNAPPY_CMAKE_DIR}/SnappyConfig.cmake"
 if [[ ! -f "${SNAPPY_CONFIG_PATH}" ]]; then
@@ -108,24 +108,24 @@ if [[ ! -f "${SNAPPY_CONFIG_PATH}" ]]; then
 fi
 
 # Check if the output library already exists
-if [ -f "${OBJ_DIR}/librocksdb.a" ]; then
-  echo "** BUILD SKIPPED: ${OBJ_DIR}/librocksdb.a already exists **"
+if [ -f "${BUILD_DIR}/librocksdb.a" ]; then
+  echo "** BUILD SKIPPED: ${BUILD_DIR}/librocksdb.a already exists **"
   exit 0
 fi
 
-if [ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]; then
-  echo "** BUILD SKIPPED: ${OBJ_DIR}/rocksdb-build/librocksdb.a already exists **"
+if [ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]; then
+  echo "** BUILD SKIPPED: ${BUILD_DIR}/rocksdb-build/librocksdb.a already exists **"
   exit 0
 fi
 
 # Create build directory if it doesn't exist
-mkdir -p "$OBJ_DIR"
+mkdir -p "$BUILD_DIR"
 
 NUM_CORES=$(get_num_cores)
 
 # Configure with CMake
 echo "Configuring RocksDB with CMake..."
-cmake -S "rocksdb" -B "$OBJ_DIR" \
+cmake -S "rocksdb" -B "$BUILD_DIR" \
   $CMAKE_TOOLCHAIN_FLAGS \
   -DCMAKE_C_COMPILER="$CC" \
   -DCMAKE_CXX_COMPILER="$CXX" \
@@ -138,16 +138,16 @@ cmake -S "rocksdb" -B "$OBJ_DIR" \
   -DZLIB_USE_STATIC_LIBS=ON \
   -DBZIP2_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}" \
   -DBZIP2_LIBRARIES="${DEPENDENCY_LIB_DIR}/libbz2.a" \
-  -DLZ4_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}" \
-  -DLZ4_LIBRARY="${DEPENDENCY_LIB_DIR}/liblz4.a" \
-  -DZSTD_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}" \
-  -DZSTD_LIBRARY="${DEPENDENCY_LIB_DIR}/libzstd.a" \
+  -Dlz4_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}" \
+  -Dlz4_LIBRARIES="${DEPENDENCY_LIB_DIR}/liblz4.a" \
+  -DZSTD_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}" \
+  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a" \
   -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a" \
   -DCMAKE_C_FLAGS="$EXTRA_C_FLAGS" \
   -DCMAKE_CXX_FLAGS="$EXTRA_CXX_FLAGS" \
   -DCMAKE_BUILD_TYPE=Release \
   -DPORTABLE=1 \
-  -DCMAKE_INSTALL_PREFIX="$OBJ_DIR" \
+  -DCMAKE_INSTALL_PREFIX="$BUILD_DIR" \
   -DWITH_GFLAGS=OFF \
   -DWITH_SNAPPY=ON \
   -DWITH_LZ4=ON \
@@ -165,19 +165,30 @@ cmake -S "rocksdb" -B "$OBJ_DIR" \
 
 # Build with CMake
 echo "Building RocksDB with CMake..."
-output=$(cmake --build "$OBJ_DIR" --config Release -j --target rocksdb --parallel "${NUM_CORES}" 2>&1)
+BUILD_LOG="${BUILD_DIR}/build.log"
+set +e
+cmake --build "$BUILD_DIR" --config Release -j --target rocksdb --parallel "${NUM_CORES}" >"$BUILD_LOG" 2>&1
+build_status=$?
+set -e
 
-# Check if the library was built successfully
-if [ -f "${OBJ_DIR}/librocksdb.a" ]; then
-  echo "** BUILD SUCCEEDED for $ARCH **"
-elif [ -f "${OBJ_DIR}/rocksdb-build/librocksdb.a" ]; then
-  echo "** BUILD SUCCEEDED for $ARCH **"
-elif echo "$output" | grep -q "up-to-date"; then
-  echo "** BUILD NOT NEEDED for $ARCH (Already up to date) **"
+if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
+  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
+  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+elif grep -q "up-to-date" "$BUILD_LOG"; then
+  echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
+elif [[ $build_status -ne 0 ]]; then
+  echo "** BUILD FAILED for ${BUILD_DIR} **"
+  echo "—— Tail of build log ————————————————"
+  tail -n 400 "$BUILD_LOG" || true
+  echo "———————————————————————————————————"
+  echo "Full log at: $BUILD_LOG"
+  echo "Contents of ${BUILD_DIR} after failure:" >&2
+  find "$BUILD_DIR" -maxdepth 2 -type f -print >&2 || true
+  exit 1
 else
-  echo "** BUILD FAILED for $ARCH **"
-  echo "$output"
-  echo "Contents of ${OBJ_DIR} after failure:" >&2
-  find "$OBJ_DIR" -maxdepth 2 -type f -print >&2 || true
+  echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
   exit 1
 fi
+
+echo "✅ RocksDB build completed successfully for $PLATFORM"

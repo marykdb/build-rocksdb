@@ -194,10 +194,10 @@ CMAKE_ARGS=(
   -DZLIB_USE_STATIC_LIBS=ON
   -DBZIP2_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
   -DBZIP2_LIBRARIES="${DEPENDENCY_LIB_DIR}/libbz2.a"
-  -DLZ4_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DLZ4_LIBRARY="${DEPENDENCY_LIB_DIR}/liblz4.a"
-  -DZSTD_INCLUDE_DIR="${DEPENDENCY_HEADERS_DIR}"
-  -DZSTD_LIBRARY="${DEPENDENCY_LIB_DIR}/libzstd.a"
+  -Dlz4_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
+  -Dlz4_LIBRARIES="${DEPENDENCY_LIB_DIR}/liblz4.a"
+  -DZSTD_INCLUDE_DIRS="${DEPENDENCY_HEADERS_DIR}"
+  -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
   -DZSTD_LIBRARIES="${DEPENDENCY_LIB_DIR}/libzstd.a"
   -DCMAKE_C_FLAGS="${EXTRA_FLAGS}"
   -DCMAKE_CXX_FLAGS="${EXTRA_FLAGS}"
@@ -239,20 +239,30 @@ fi
 cmake "${CMAKE_ARGS[@]}"
 
 echo "Building RocksDB with CMake..."
-output=$(cmake --build "$BUILD_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" 2>&1)
+BUILD_LOG="${BUILD_DIR}/build.log"
+set +e
+cmake --build "$BUILD_DIR" --config Release --target rocksdb --parallel "${NUM_CORES}" >"$BUILD_LOG" 2>&1
+build_status=$?
+set -e
 
 if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
-  echo "** BUILD SUCCEEDED for ${CONFIG_ARCH} **"
+  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
 elif [[ -f "${BUILD_DIR}/rocksdb-build/librocksdb.a" ]]; then
-  echo "** BUILD SUCCEEDED for ${CONFIG_ARCH} **"
-elif echo "$output" | grep -q "up-to-date"; then
-  echo "** BUILD NOT NEEDED for ${CONFIG_ARCH} (Already up to date) **"
-else
-  echo "** BUILD FAILED for ${CONFIG_ARCH} **"
-  echo "$output"
+  echo "** BUILD SUCCEEDED for ${BUILD_DIR} **"
+elif grep -q "up-to-date" "$BUILD_LOG"; then
+  echo "** BUILD NOT NEEDED for ${BUILD_DIR} (Already up to date) **"
+elif [[ $build_status -ne 0 ]]; then
+  echo "** BUILD FAILED for ${BUILD_DIR} **"
+  echo "—— Tail of build log ————————————————"
+  tail -n 400 "$BUILD_LOG" || true
+  echo "———————————————————————————————————"
+  echo "Full log at: $BUILD_LOG"
   echo "Contents of ${BUILD_DIR} after failure:" >&2
   find "$BUILD_DIR" -maxdepth 2 -type f -print >&2 || true
   exit 1
+else
+  echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $BUILD_LOG) **"
+  exit 1
 fi
 
-echo "✅ RocksDB build completed successfully for ${CONFIG_ARCH}"
+echo "✅ RocksDB build completed successfully for $PLATFORM"
