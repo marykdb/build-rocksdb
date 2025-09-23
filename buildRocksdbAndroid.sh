@@ -102,7 +102,7 @@ if [[ -f "${BUILD_DIR}/librocksdb.a" ]]; then
   exit 0
 fi
 
-EXTRA_FLAGS="-fPIC -DANDROID -I${PROJECT_ROOT}/build/include -I${PROJECT_ROOT}/build/include/dependencies"
+EXTRA_FLAGS="-fPIC -g0 -ffunction-sections -fdata-sections -DANDROID -I${PROJECT_ROOT}/build/include -I${PROJECT_ROOT}/build/include/dependencies"
 EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_FLAGS+=" ${ANDROID_TOOLCHAIN_EXTRA_CFLAGS}"
 
@@ -221,6 +221,16 @@ CMAKE_ARGS=(
   -DCMAKE_POSITION_INDEPENDENT_CODE=ON
   -DCMAKE_ANDROID_STL_TYPE=c++_static
 )
+
+# Prefer thin archives with llvm-ar to shrink on-disk .a size
+if "${AR_BIN}" --version 2>/dev/null | head -n1 | grep -qi "LLVM"; then
+  CMAKE_ARGS+=(
+    -DCMAKE_C_ARCHIVE_CREATE="<CMAKE_AR> rcT <TARGET> <OBJECTS>"
+    -DCMAKE_CXX_ARCHIVE_CREATE="<CMAKE_AR> rcT <TARGET> <OBJECTS>"
+    -DCMAKE_C_ARCHIVE_FINISH="<CMAKE_RANLIB> <TARGET>"
+    -DCMAKE_CXX_ARCHIVE_FINISH="<CMAKE_RANLIB> <TARGET>"
+  )
+fi
 
 if [[ -n "${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE:-}" ]]; then
   CMAKE_ARGS+=(-DCMAKE_TOOLCHAIN_FILE="${ANDROID_TOOLCHAIN_CMAKE_TOOLCHAIN_FILE}")
