@@ -12,7 +12,7 @@ jobs:
   linux-x64:
     name: Linux x86_64
     runs-on: ubuntu-latest
-    container: ubuntu:20.04
+    container: ubuntu:18.04
     steps:
       - name: Prepare apt (install git for checkout)
         run: |
@@ -20,7 +20,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
             pkg-config build-essential cmake ninja-build autoconf automake libtool unzip zip
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - name: Select GCC 8
@@ -42,7 +42,7 @@ jobs:
   linux-arm64:
     name: Linux ARM64
     runs-on: ubuntu-24.04-arm
-    container: ubuntu:20.04
+    container: ubuntu:18.04
     steps:
       - name: Prepare apt (install git for checkout)
         run: |
@@ -50,7 +50,7 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
             pkg-config cmake ninja-build autoconf automake libtool unzip zip
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           submodules: true
       - name: Select GCC 8
