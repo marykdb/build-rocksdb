@@ -251,11 +251,41 @@ elif [[ "$OUTPUT_DIR" == *macos_arm64* ]]; then
   export CXX="clang++"
   export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
-  export CC="x86_64-w64-mingw32-gcc"
-  export CXX="x86_64-w64-mingw32-g++"
-  export AR="x86_64-w64-mingw32-ar"
+  TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
+  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-gcc"
+    export CXX="${TOOLCHAIN_TRIPLE}-g++"
+  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-clang"
+    if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+      export CXX="${TOOLCHAIN_TRIPLE}-clang++"
+    else
+      export CXX="${TOOLCHAIN_TRIPLE}-clang"
+    fi
+  else
+    echo "❌ Missing Windows x86_64 MinGW cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
+    echo "   Install an x86_64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
+    exit 1
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
+    export AR="${TOOLCHAIN_TRIPLE}-ar"
+  elif command -v llvm-ar >/dev/null 2>&1; then
+    export AR="llvm-ar"
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-ranlib" >/dev/null 2>&1; then
+    export RANLIB="${TOOLCHAIN_TRIPLE}-ranlib"
+  elif command -v llvm-ranlib >/dev/null 2>&1; then
+    export RANLIB="llvm-ranlib"
+  fi
+
   export uname="mingw32"
-  export CROSS_PREFIX="x86_64-w64-mingw32-"
+  if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1 || command -v "${TOOLCHAIN_TRIPLE}-ranlib" >/dev/null 2>&1; then
+    export CROSS_PREFIX="${TOOLCHAIN_TRIPLE}-"
+  else
+    export CROSS_PREFIX=""
+  fi
 elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
   if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
@@ -556,39 +586,64 @@ build_snappy() {
     EXTRA_CMAKEFLAGS+=" -DSNAPPY_HAVE_NEON=0"
   fi
 
-  cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-        -DBUILD_SHARED_LIBS=OFF \
-        ${EXTRA_CMAKEFLAGS} \
-        -DCMAKE_INSTALL_PREFIX="${install_prefix}" \
-        -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" \
-        -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}" \
-        -DSNAPPY_BUILD_BENCHMARKS=OFF \
-        -DSNAPPY_BUILD_TESTS=OFF \
-        -Wno-dev ${PLATFORM_CMAKE_FLAGS} .
+  # Force a MinGW/Clang build with Ninja on Windows targets to avoid MSVC picking
+  local -a cmake_configure=(
+    -G Ninja
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DBUILD_SHARED_LIBS=OFF
+    -DCMAKE_INSTALL_PREFIX="${install_prefix}"
+    -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
+    -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
+    -DSNAPPY_BUILD_BENCHMARKS=OFF
+    -DSNAPPY_BUILD_TESTS=OFF
+    -Wno-dev
+  )
+  if [[ -n "${AR:-}" ]]; then cmake_configure+=( -DCMAKE_AR="${AR}" ); fi
+  if [[ -n "${RANLIB:-}" ]]; then cmake_configure+=( -DCMAKE_RANLIB="${RANLIB}" ); fi
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    cmake_configure+=( -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY )
+  fi
+  if [ "${TOOLCHAIN_FILE}" != null ]; then
+    cmake_configure+=( -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" )
+  fi
 
-  # Use CMake-native build so it works with Ninja/Make/MSBuild
+  cmake "${cmake_configure[@]}" ${EXTRA_CMAKEFLAGS} ${PLATFORM_CMAKE_FLAGS} .
+
   cmake --build . --target clean
   cmake --build . --config Release --target snappy --parallel
   cmake --install . --prefix "${install_prefix}" > /dev/null
-  cp "snappy.h" "snappy-stubs-public.h" "${DEPENDENCY_INCLUDE_DIR}/"
+
   # Prefer installed lib; handle both MinGW (.a) and MSVC (.lib)
   if [[ -f "${install_prefix}/lib/libsnappy.a" ]]; then
     cp "${install_prefix}/lib/libsnappy.a" "${OUTPUT_DIR}/"
     strip_archive "${OUTPUT_DIR}/libsnappy.a"
+    built_lib="libsnappy.a"
   elif [[ -f "${install_prefix}/lib/snappy.lib" ]]; then
+    # If we ended up with an MSVC build but target is mingw, treat as an error
+    if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+      echo "❌ Built MSVC static lib (snappy.lib) instead of MinGW archive (libsnappy.a). Ensure llvm-mingw is on PATH and selected (CC/CXX)." >&2
+      exit 1
+    fi
     cp "${install_prefix}/lib/snappy.lib" "${OUTPUT_DIR}/"
+    built_lib="snappy.lib"
   elif [[ -f "libsnappy.a" ]]; then
     cp "libsnappy.a" "${OUTPUT_DIR}/"
     strip_archive "${OUTPUT_DIR}/libsnappy.a"
+    built_lib="libsnappy.a"
   elif [[ -f "snappy.lib" ]]; then
+    if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+      echo "❌ Built MSVC static lib (snappy.lib) instead of MinGW archive (libsnappy.a)." >&2
+      exit 1
+    fi
     cp "snappy.lib" "${OUTPUT_DIR}/"
+    built_lib="snappy.lib"
   else
     echo "❌ Could not find built snappy static library" >&2
     exit 1
   fi
   popd > /dev/null
-  echo "✅ Finished building libsnappy.a into ${OUTPUT_DIR}!"
+  echo "✅ Finished building ${built_lib} into ${OUTPUT_DIR}!"
 }
 
 # ---------------------------------------------------------
