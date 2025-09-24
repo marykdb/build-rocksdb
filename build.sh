@@ -43,6 +43,102 @@ resolve_host() {
 HOST_PLATFORM="$(resolve_host)"
 HOST_ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
 
+MINIMUM_CMAKE_VERSION="3.12.0"
+BOOTSTRAP_CMAKE_VERSION="3.27.9"
+
+version_ge() {
+  local lhs="$1"
+  local rhs="$2"
+  IFS='.' read -r -a lhs_parts <<<"${lhs}"
+  IFS='.' read -r -a rhs_parts <<<"${rhs}"
+  local length=${#lhs_parts[@]}
+  if (( ${#rhs_parts[@]} > length )); then
+    length=${#rhs_parts[@]}
+  fi
+  for ((i = 0; i < length; ++i)); do
+    local lhs_val="${lhs_parts[i]:-0}"
+    local rhs_val="${rhs_parts[i]:-0}"
+    if (( lhs_val > rhs_val )); then
+      return 0
+    fi
+    if (( lhs_val < rhs_val )); then
+      return 1
+    fi
+  done
+  return 0
+}
+
+detect_cmake_version() {
+  if ! command -v cmake >/dev/null 2>&1; then
+    printf ''
+    return
+  fi
+  local version_line
+  version_line="$(cmake --version 2>/dev/null | head -n 1 || true)"
+  printf '%s' "${version_line##* }"
+}
+
+ensure_modern_cmake() {
+  local current_version
+  current_version="$(detect_cmake_version)"
+  if [[ -n "$current_version" ]] && version_ge "$current_version" "$MINIMUM_CMAKE_VERSION"; then
+    return
+  fi
+
+  if [[ -n "$current_version" ]]; then
+    echo "Detected CMake ${current_version}, which is older than required ${MINIMUM_CMAKE_VERSION}." >&2
+  else
+    echo "CMake executable not found in PATH." >&2
+  fi
+
+  local bootstrap_dir="${PROJECT_ROOT}/build/tools"
+  local install_dir="${bootstrap_dir}/cmake-${BOOTSTRAP_CMAKE_VERSION}"
+  local cmake_bin="${install_dir}/bin/cmake"
+  if [[ -x "$cmake_bin" ]]; then
+    export PATH="${install_dir}/bin:${PATH}"
+    return
+  fi
+
+  mkdir -p "$bootstrap_dir"
+
+  if [[ "$HOST_PLATFORM" != "LINUX" ]]; then
+    fail "CMake >= ${MINIMUM_CMAKE_VERSION} is required. Please install a modern CMake before running build.sh."
+  fi
+
+  local arch bundle archive sha url
+  arch="$(uname -m | tr '[:upper:]' '[:lower:]')"
+  case "$arch" in
+    x86_64|amd64)
+      bundle="linux-x86_64"
+      archive="cmake-${BOOTSTRAP_CMAKE_VERSION}-${bundle}.tar.gz"
+      sha="72b01478eeb312bf1a0136208957784fe55a7b587f8d9f9142a7fc9b0b9e9a28"
+      ;;
+    aarch64|arm64)
+      bundle="linux-aarch64"
+      archive="cmake-${BOOTSTRAP_CMAKE_VERSION}-${bundle}.tar.gz"
+      sha="11bf3d30697df465cdf43664a9473a586f010c528376a966fd310a3a22082461"
+      ;;
+    *)
+      fail "Unsupported Linux architecture '${arch}' for bundled CMake. Install CMake >= ${MINIMUM_CMAKE_VERSION} manually."
+      ;;
+  esac
+
+  url="https://github.com/Kitware/CMake/releases/download/v${BOOTSTRAP_CMAKE_VERSION}/${archive}"
+  local download_path="${bootstrap_dir}/${archive}"
+  echo "Bootstrapping CMake ${BOOTSTRAP_CMAKE_VERSION} (${bundle}) from ${url}" >&2
+  curl --fail --location --silent --show-error "$url" --output "$download_path"
+  echo "${sha}  ${download_path}" | sha256sum --check --status
+
+  local extract_dir
+  extract_dir="${bootstrap_dir}/cmake-${BOOTSTRAP_CMAKE_VERSION}-${bundle}"
+  rm -rf "$extract_dir" "$install_dir"
+  tar -C "$bootstrap_dir" -xzf "$download_path"
+  mv "${bootstrap_dir}/cmake-${BOOTSTRAP_CMAKE_VERSION}-${bundle}" "$install_dir"
+  rm -f "$download_path"
+
+  export PATH="${install_dir}/bin:${PATH}"
+}
+
 declare -a CONFIG_IDS=()
 declare -a CONFIG_KEYS=()
 declare -a CONFIG_VALUES=()
@@ -527,6 +623,7 @@ main() {
     ensure_valid_config "$config"
   done
 
+  ensure_modern_cmake
   prepare_headers
 
   for config in "${positional[@]}"; do

@@ -5,8 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR"
 
-# shellcheck source=./scripts/build-rocksdb-common.sh
-source "${REPO_ROOT}/scripts/build-rocksdb-common.sh"
+# shellcheck source=./build-rocksdb-common.sh
+source "${REPO_ROOT}/build-rocksdb-common.sh"
 
 PLATFORM="macos"
 SIMULATOR=false

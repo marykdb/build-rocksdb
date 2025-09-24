@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
-# shellcheck source=./scripts/build-rocksdb-common.sh
-source "${PROJECT_ROOT}/scripts/build-rocksdb-common.sh"
+# shellcheck source=./build-rocksdb-common.sh
+source "${PROJECT_ROOT}/build-rocksdb-common.sh"
 
 usage() {
   cat <<USAGE

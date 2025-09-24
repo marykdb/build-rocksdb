@@ -22,8 +22,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 
-if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
-  export PATH="${LLVM_MINGW_ROOT}/bin:${PATH}"
+# shellcheck source=./build-rocksdb-common.sh
+source "${SCRIPT_DIR}/build-rocksdb-common.sh"
+
+if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
+  build_common::prepend_unique_path PATH "${LLVM_MINGW_ROOT}/bin"
 fi
 
 # shellcheck source=./scripts/android-ndk.sh
@@ -268,6 +271,19 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     exit 1
   fi
 
+  build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
+  export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
+
+  if [[ "${CC}" == *"clang"* ]]; then
+    build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+  fi
+  if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+    build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
+  fi
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"
   elif command -v llvm-ar >/dev/null 2>&1; then
@@ -285,6 +301,11 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     export CROSS_PREFIX="${TOOLCHAIN_TRIPLE}-"
   else
     export CROSS_PREFIX=""
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-windres" >/dev/null 2>&1; then
+    export RC="${TOOLCHAIN_TRIPLE}-windres"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "$(build_common::shell_escape "-DCMAKE_RC_COMPILER=${RC}")"
   fi
 elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
@@ -304,6 +325,19 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     exit 1
   fi
 
+  build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
+  export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
+
+  if [[ "${CC}" == *"clang"* ]]; then
+    build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+  fi
+  if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+    build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
+  fi
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"
   elif command -v llvm-ar >/dev/null 2>&1; then
@@ -321,6 +355,11 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     export CROSS_PREFIX="${TOOLCHAIN_TRIPLE}-"
   else
     export CROSS_PREFIX=""
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-windres" >/dev/null 2>&1; then
+    export RC="${TOOLCHAIN_TRIPLE}-windres"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "$(build_common::shell_escape "-DCMAKE_RC_COMPILER=${RC}")"
   fi
 fi
 set -u
@@ -554,17 +593,20 @@ build_zstd() {
 build_snappy() {
   local tarball="${DOWNLOAD_DIR}/snappy-${SNAPPY_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/snappy-${SNAPPY_VER}"
+  # Install Snappy into the output tree so CMake package files are available
   local install_prefix="${OUTPUT_DIR}/deps/snappy"
 
   rm -rf "$src_dir"
+  rm -rf "${install_prefix}"
 
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
 
   mkdir -p "${install_prefix}"
 
+  local -a snappy_toolchain_args=()
   if [ "${TOOLCHAIN_FILE}" != null ]; then
-    EXTRA_CMAKEFLAGS+=" -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN_FILE}"
+    snappy_toolchain_args+=( -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" )
   else
     local toolchain_file="toolchain.cmake"
     echo "set(CMAKE_C_FLAGS \"\${CMAKE_C_FLAGS} ${EXTRA_CFLAGS}\")" > "${toolchain_file}"
@@ -574,71 +616,134 @@ build_snappy() {
     echo "set(CMAKE_C_COMPILER_WORKS ON)" >> "${toolchain_file}"
     echo "set(CMAKE_CXX_COMPILER_WORKS ON)" >> "${toolchain_file}"
     echo "set(CMAKE_16BIT_TYPE \"unsigned long\")" >> "${toolchain_file}"
+    if [[ -n "${MINGW_INCLUDE_DIRECTORIES:-}" ]]; then
+      echo "set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES \"\${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES};${MINGW_INCLUDE_DIRECTORIES}\")" >> "${toolchain_file}"
+      echo "set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES \"\${CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES};${MINGW_INCLUDE_DIRECTORIES}\")" >> "${toolchain_file}"
+    fi
 
-    EXTRA_CMAKEFLAGS+=" -DCMAKE_C_COMPILER=${CC} -DCMAKE_CXX_COMPILER=${CXX} -DCMAKE_TOOLCHAIN_FILE=${toolchain_file}"
+    snappy_toolchain_args+=( -DCMAKE_C_COMPILER="${CC}" -DCMAKE_CXX_COMPILER="${CXX}" -DCMAKE_TOOLCHAIN_FILE="${toolchain_file}" )
     if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
-      EXTRA_CMAKEFLAGS+=" -DCMAKE_SYSTEM_NAME=Windows"
-      EXTRA_CMAKEFLAGS+=" -DSNAPPY_IS_BIG_ENDIAN=0"
+      snappy_toolchain_args+=( -DCMAKE_SYSTEM_NAME=Windows -DSNAPPY_IS_BIG_ENDIAN=0 )
     fi
   fi
 
   if [[ "$OUTPUT_DIR" == *android_arm32* ]]; then
-    EXTRA_CMAKEFLAGS+=" -DSNAPPY_HAVE_NEON=0"
+    snappy_toolchain_args+=( -DSNAPPY_HAVE_NEON=0 )
   fi
 
-  # Force a MinGW/Clang build with Ninja on Windows targets to avoid MSVC picking
   local -a cmake_configure=(
     -G Ninja
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -DBUILD_SHARED_LIBS=OFF
     -DCMAKE_INSTALL_PREFIX="${install_prefix}"
+    -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
     -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
     -DSNAPPY_BUILD_BENCHMARKS=OFF
     -DSNAPPY_BUILD_TESTS=OFF
     -Wno-dev
   )
-  if [[ -n "${AR:-}" ]]; then cmake_configure+=( -DCMAKE_AR="${AR}" ); fi
-  if [[ -n "${RANLIB:-}" ]]; then cmake_configure+=( -DCMAKE_RANLIB="${RANLIB}" ); fi
+
+  cmake_configure+=( "${snappy_toolchain_args[@]}" )
+
+  if [[ -n "${MINGW_INCLUDE_DIRECTORIES:-}" ]]; then
+    cmake_configure+=(
+      "-DCMAKE_C_STANDARD_INCLUDE_DIRECTORIES=${MINGW_INCLUDE_DIRECTORIES}"
+      "-DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${MINGW_INCLUDE_DIRECTORIES}"
+    )
+  fi
+
+  if [[ -n "${MINGW_TRIPLE:-}" ]]; then
+    cmake_configure+=( -DCMAKE_C_COMPILER_TARGET="${MINGW_TRIPLE}" -DCMAKE_CXX_COMPILER_TARGET="${MINGW_TRIPLE}" )
+  fi
+  if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+    local cmake_sysroot
+    cmake_sysroot="$(build_common::to_tool_path "${MINGW_SYSROOT}")"
+    cmake_configure+=( -DCMAKE_SYSROOT="${cmake_sysroot}" )
+  fi
+  if [[ -n "${RC:-}" ]]; then
+    cmake_configure+=( -DCMAKE_RC_COMPILER="${RC}" )
+  fi
+  if [[ -n "${AR:-}" ]]; then
+    cmake_configure+=( -DCMAKE_AR="${AR}" )
+  fi
+  if [[ -n "${RANLIB:-}" ]]; then
+    cmake_configure+=( -DCMAKE_RANLIB="${RANLIB}" )
+  fi
   if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
     cmake_configure+=( -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY )
-  fi
-  if [ "${TOOLCHAIN_FILE}" != null ]; then
-    cmake_configure+=( -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" )
   fi
 
   cmake "${cmake_configure[@]}" ${EXTRA_CMAKEFLAGS} ${PLATFORM_CMAKE_FLAGS} .
 
   cmake --build . --target clean
-  cmake --build . --config Release --target snappy --parallel
-  cmake --install . --prefix "${install_prefix}" > /dev/null
+  # Prefer parallel builds when supported but gracefully fall back to serialized builds on older CMake releases.
+  JOBS=2
+  if command -v nproc >/dev/null 2>&1; then
+    JOBS=$(nproc)
+  elif command -v sysctl >/dev/null 2>&1; then
+    JOBS=$(sysctl -n hw.ncpu 2>/dev/null || echo 2)
+  fi
+  if (( JOBS < 1 )); then
+    JOBS=1
+  fi
+  local snappy_multi_config=0
+  if build_common::cmake_generator_is_multi_config "."; then
+    snappy_multi_config=1
+  fi
 
-  # Prefer installed lib; handle both MinGW (.a) and MSVC (.lib)
+  local -a snappy_build_cmd=(cmake --build .)
+  if (( snappy_multi_config )); then
+    snappy_build_cmd+=(--config Release)
+  fi
+  snappy_build_cmd+=(--target snappy)
+  if [[ -n "${JOBS}" ]] && build_common::cmake_supports_parallel; then
+    snappy_build_cmd+=(--parallel "${JOBS}")
+  elif [[ -z "${BUILD_COMMON_CMAKE_PARALLEL_WARNED:-}" ]]; then
+    echo "⚠️  Detected CMake without --parallel support; falling back to serialized builds." >&2
+    BUILD_COMMON_CMAKE_PARALLEL_WARNED=1
+  fi
+  "${snappy_build_cmd[@]}"
+  if (( snappy_multi_config )); then
+    DESTDIR= cmake --install . --config Release > /dev/null
+  else
+    DESTDIR= cmake --install . > /dev/null
+  fi
+
+  # Copy headers into shared include
+  if [[ -d "${install_prefix}/include" ]]; then
+    cp -f "${install_prefix}/include/"*.h "${DEPENDENCY_INCLUDE_DIR}/" 2>/dev/null || true
+  fi
+
+  # Copy built static lib into output
   if [[ -f "${install_prefix}/lib/libsnappy.a" ]]; then
     cp "${install_prefix}/lib/libsnappy.a" "${OUTPUT_DIR}/"
     strip_archive "${OUTPUT_DIR}/libsnappy.a"
     built_lib="libsnappy.a"
   elif [[ -f "${install_prefix}/lib/snappy.lib" ]]; then
-    # If we ended up with an MSVC build but target is mingw, treat as an error
     if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
-      echo "❌ Built MSVC static lib (snappy.lib) instead of MinGW archive (libsnappy.a). Ensure llvm-mingw is on PATH and selected (CC/CXX)." >&2
+      echo "❌ Built MSVC static lib (snappy.lib) instead of MinGW archive (libsnappy.a)." >&2
       exit 1
     fi
     cp "${install_prefix}/lib/snappy.lib" "${OUTPUT_DIR}/"
     built_lib="snappy.lib"
-  elif [[ -f "libsnappy.a" ]]; then
+  fi
+
+  # Fallback: copy directly from build tree if install did not produce the library
+  if [[ -z "${built_lib:-}" && -f "libsnappy.a" ]]; then
     cp "libsnappy.a" "${OUTPUT_DIR}/"
     strip_archive "${OUTPUT_DIR}/libsnappy.a"
     built_lib="libsnappy.a"
-  elif [[ -f "snappy.lib" ]]; then
+  elif [[ -z "${built_lib:-}" && -f "snappy.lib" ]]; then
     if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
       echo "❌ Built MSVC static lib (snappy.lib) instead of MinGW archive (libsnappy.a)." >&2
       exit 1
     fi
     cp "snappy.lib" "${OUTPUT_DIR}/"
     built_lib="snappy.lib"
-  else
+  fi
+  if [[ -z "${built_lib:-}" ]]; then
     echo "❌ Could not find built snappy static library" >&2
     exit 1
   fi
