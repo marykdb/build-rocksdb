@@ -20,9 +20,17 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
             pkg-config build-essential cmake ninja-build autoconf automake libtool unzip zip
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
+      - name: Manual checkout
+        env:
+          REPO: ${{ github.repository }}
+          REF:  ${{ github.ref }}
+        run: |
+          git init .
+          git config --global --add safe.directory /__w/build-rocksdb/build-rocksdb
+          git remote add origin https://github.com/${REPO}.git
+          git fetch --depth=1 origin "${REF}"
+          git checkout FETCH_HEAD
+          git submodule update --init --recursive --depth=1
       - name: Select GCC 8
         run: |
           update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 \
@@ -50,9 +58,17 @@ jobs:
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
             pkg-config cmake ninja-build autoconf automake libtool unzip zip
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
+      - name: Manual checkout
+        env:
+          REPO: ${{ github.repository }}
+          REF:  ${{ github.ref }}
+        run: |
+          git init .
+          git config --global --add safe.directory /__w/build-rocksdb/build-rocksdb
+          git remote add origin https://github.com/${REPO}.git
+          git fetch --depth=1 origin "${REF}"
+          git checkout FETCH_HEAD
+          git submodule update --init --recursive --depth=1
       - name: Select GCC 8
         run: |
           update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 \
