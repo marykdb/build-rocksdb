@@ -11,157 +11,49 @@ permissions:
 jobs:
   linux-x64:
     name: Linux x86_64
-    runs-on: ubuntu-latest
-    container: ubuntu:18.04
+    runs-on: ubuntu-24.04
     steps:
-      - name: Prepare apt (install git for checkout)
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
-            pkg-config build-essential cmake ninja-build autoconf automake libtool unzip zip jq
-      - name: Manual checkout
-        env:
-          REPO: ${{ github.repository }}
-          REF:  ${{ github.ref }}
-        run: |
-          git init .
-          git config --global --add safe.directory /__w/build-rocksdb/build-rocksdb
-          git remote add origin https://github.com/${REPO}.git
-          git fetch --depth=1 origin "${REF}"
-          git checkout FETCH_HEAD
-          git submodule update --init --recursive --depth=1
-      - name: Select GCC 8
-        run: |
-          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 \
-            --slave /usr/bin/g++ g++ /usr/bin/g++-8
-          gcc --version
-          g++ --version
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build legacy toolchain container image
+        run: docker build -t rocksdb-linux-legacy -f docker/linux-legacy.Dockerfile .
       - name: Build Linux x86_64 package
-        env:
-          CC: gcc-8
-          CXX: g++-8
-        run: ./build.sh linuxX64
-      - name: Create or get staging release (linux-x64)
-        shell: bash
-        id: staging_linux_x64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          TAG="staging-${GITHUB_RUN_ID}"
-          OWNER_REPO="${GITHUB_REPOSITORY}"
-          API="https://api.github.com/repos/${OWNER_REPO}"
-          existing=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/tags/$TAG" || true)
-          if echo "$existing" | jq -e '.id' >/dev/null 2>&1; then
-            id=$(echo "$existing" | jq -r '.id')
-            upload_url=$(echo "$existing" | jq -r '.upload_url' | sed 's/{.*}//')
-          else
-            created=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" -H "content-type: application/json" \
-              -d "{\"tag_name\":\"$TAG\",\"name\":\"Staging $TAG\",\"draft\":true}" \
-              "$API/releases")
-            id=$(echo "$created" | jq -r '.id')
-            upload_url=$(echo "$created" | jq -r '.upload_url' | sed 's/{.*}//')
-          fi
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
-
-      - name: Upload linux-x86_64 ZIP to staging release
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER_REPO: ${{ github.repository }}
-          RELEASE_ID: ${{ steps.staging_linux_x64.outputs.id }}
-          UPLOAD_URL: ${{ steps.staging_linux_x64.outputs.upload_url }}
-        run: |
-          set -euo pipefail
-          API="https://api.github.com/repos/${OWNER_REPOSITORY:-$GITHUB_REPOSITORY}"
-          ASSET="build/archives/rocksdb-linux-x86_64.zip"
-          NAME=$(basename "$ASSET")
-          assets=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/$RELEASE_ID/assets")
-          existing_id=$(echo "$assets" | jq -r ".[] | select(.name==\"$NAME\") | .id" || true)
-          if [[ -n "${existing_id:-}" && "${existing_id}" != "null" ]]; then
-            curl -sS -X DELETE -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/assets/$existing_id" >/dev/null
-          fi
-          curl -sS -H "authorization: Bearer $GITHUB_TOKEN" -H "content-type: application/zip" \
-            --data-binary @"$ASSET" "$UPLOAD_URL?name=$NAME" >/dev/null
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            rocksdb-linux-legacy \
+            bash -lc './build.sh linuxX64'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-android-arm64
+          path: build/archives/rocksdb-linux-x64.zip
 
   linux-arm64:
     name: Linux ARM64
     runs-on: ubuntu-24.04-arm
-    container: ubuntu:18.04
     steps:
-      - name: Prepare apt (install git for checkout)
-        run: |
-          apt-get update
-          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            git curl ca-certificates tzdata build-essential gcc-8 g++-8 \
-            pkg-config cmake ninja-build autoconf automake libtool unzip zip jq
-      - name: Manual checkout
-        env:
-          REPO: ${{ github.repository }}
-          REF:  ${{ github.ref }}
-        run: |
-          git init .
-          git config --global --add safe.directory /__w/build-rocksdb/build-rocksdb
-          git remote add origin https://github.com/${REPO}.git
-          git fetch --depth=1 origin "${REF}"
-          git checkout FETCH_HEAD
-          git submodule update --init --recursive --depth=1
-      - name: Select GCC 8
-        run: |
-          update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-8 80 \
-            --slave /usr/bin/g++ g++ /usr/bin/g++-8
-          gcc --version
-          g++ --version
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Build legacy toolchain container image
+        run: docker build -t rocksdb-linux-legacy -f docker/linux-legacy.Dockerfile .
       - name: Build Linux ARM64 package
-        env:
-          CC: gcc-8
-          CXX: g++-8
-        run: ./build.sh linuxArm64   # or your KN target name for ARM64
-      - name: Create or get staging release (linux-arm64)
-        shell: bash
-        id: staging_linux_arm64
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -euo pipefail
-          TAG="staging-${GITHUB_RUN_ID}"
-          OWNER_REPO="${GITHUB_REPOSITORY}"
-          API="https://api.github.com/repos/${OWNER_REPO}"
-          existing=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/tags/$TAG" || true)
-          if echo "$existing" | jq -e '.id' >/dev/null 2>&1; then
-            id=$(echo "$existing" | jq -r '.id')
-            upload_url=$(echo "$existing" | jq -r '.upload_url' | sed 's/{.*}//')
-          else
-            created=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" -H "content-type: application/json" \
-              -d "{\"tag_name\":\"$TAG\",\"name\":\"Staging $TAG\",\"draft\":true}" \
-              "$API/releases")
-            id=$(echo "$created" | jq -r '.id')
-            upload_url=$(echo "$created" | jq -r '.upload_url' | sed 's/{.*}//')
-          fi
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
-
-      - name: Upload linux-arm64 ZIP to staging release
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER_REPO: ${{ github.repository }}
-          RELEASE_ID: ${{ steps.staging_linux_arm64.outputs.id }}
-          UPLOAD_URL: ${{ steps.staging_linux_arm64.outputs.upload_url }}
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            rocksdb-linux-legacy \
+            bash -lc './build.sh linuxArm64'
+      - name: Ensure release tooling is available
         run: |
-          set -euo pipefail
-          API="https://api.github.com/repos/${OWNER_REPOSITORY:-$GITHUB_REPOSITORY}"
-          ASSET="build/archives/rocksdb-linux-arm64.zip"
-          NAME=$(basename "$ASSET")
-          assets=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/$RELEASE_ID/assets")
-          existing_id=$(echo "$assets" | jq -r ".[] | select(.name==\"$NAME\") | .id" || true)
-          if [[ -n "${existing_id:-}" && "${existing_id}" != "null" ]]; then
-            curl -sS -X DELETE -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/assets/$existing_id" >/dev/null
-          fi
-          curl -sS -H "authorization: Bearer $GITHUB_TOKEN" -H "content-type: application/zip" \
-            --data-binary @"$ASSET" "$UPLOAD_URL?name=$NAME" >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y jq curl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rocksdb-android-arm64
+          path: build/archives/rocksdb-linux-arm64.zip
 
   android-arm32:
     name: Android ARM32
@@ -487,11 +379,6 @@ jobs:
           path: artifacts
       - name: List downloaded artifacts
         run: ls -R artifacts
-      - name: Prepare apt (jq for API ops)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends jq curl ca-certificates
       - name: Determine RocksDB version
         id: rocksdb_version
         run: |
@@ -520,82 +407,10 @@ jobs:
           timestamp="$(date +'%Y%m%dT%H%M%S')Z"
           echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
           echo "tag=rocksdb-${ROCKSDB_VERSION}-${timestamp}" >> "$GITHUB_OUTPUT"
-      - name: Get staging release by run ID
-        id: get_staging
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          TAG="staging-${GITHUB_RUN_ID}"
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          res=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/tags/$TAG")
-          id=$(echo "$res" | jq -r '.id')
-          upload_url=$(echo "$res" | jq -r '.upload_url' | sed 's/{.*}//')
-          if [[ -z "$id" || "$id" == "null" ]]; then
-            echo "::error::Staging release with tag $TAG not found. Ensure Linux jobs ran." >&2
-            exit 1
-          fi
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-          echo "upload_url=$upload_url" >> "$GITHUB_OUTPUT"
-
-      - name: Upload non-Linux assets to staging release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_ID: ${{ steps.get_staging.outputs.id }}
-          UPLOAD_URL: ${{ steps.get_staging.outputs.upload_url }}
-        run: |
-          set -euo pipefail
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-
-          upload_asset() {
-            local path="$1"
-            if [[ ! -f "$path" ]]; then
-              echo "Skipping missing asset: $path"
-              return 0
-            fi
-            local name
-            name=$(basename "$path")
-            # Skip linux assets; those were uploaded by the linux jobs
-            if [[ "$name" == rocksdb-linux-* ]]; then
-              echo "Skipping linux asset already uploaded: $name"
-              return 0
-            fi
-            assets=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/$RELEASE_ID/assets")
-            existing_id=$(echo "$assets" | jq -r ".[] | select(.name==\"$name\") | .id" || true)
-            if [[ -n "${existing_id:-}" && "${existing_id}" != "null" ]]; then
-              curl -sS -X DELETE -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/assets/$existing_id" >/dev/null
-            fi
-            ctype="application/zip"
-            case "$name" in
-              *.tar.gz|*.tgz) ctype="application/gzip" ;;
-              *.xz) ctype="application/x-xz" ;;
-            esac
-            echo "Uploading $name ..."
-            curl -sS -H "authorization: Bearer $GITHUB_TOKEN" -H "content-type: $ctype" \
-                 --data-binary @"$path" "$UPLOAD_URL?name=$name" >/dev/null
-          }
-
-          shopt -s globstar nullglob
-          for f in artifacts/**/*.zip artifacts/**/*.tar.gz artifacts/**/*.tgz artifacts/**/*.xz; do
-            upload_asset "$f"
-          done
-
-      - name: Publish release (promote staging)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ROCKSDB_VERSION: ${{ steps.rocksdb_version.outputs.version }}
-          TS: ${{ steps.release_metadata.outputs.timestamp }}
-        run: |
-          set -euo pipefail
-          TAG="staging-${GITHUB_RUN_ID}"
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          res=$(curl -sS -H "authorization: Bearer $GITHUB_TOKEN" "$API/releases/tags/$TAG")
-          id=$(echo "$res" | jq -r '.id')
-          if [[ -z "$id" || "$id" == "null" ]]; then
-            echo "::error::Staging release with tag $TAG not found." >&2
-            exit 1
-          fi
-          NAME="RocksDB ${ROCKSDB_VERSION} builds ${TS}"
-          curl -sS -X PATCH -H "authorization: Bearer $GITHUB_TOKEN" -H "content-type: application/json" \
-               -d "{\"name\":\"$NAME\",\"draft\":false}" \
-               "$API/releases/$id" >/dev/null
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          name: RocksDB ${{ steps.rocksdb_version.outputs.version }} builds ${{ steps.release_metadata.outputs.timestamp }}
+          tag_name: ${{ steps.release_metadata.outputs.tag }}
+          draft: false
+          prerelease: false
