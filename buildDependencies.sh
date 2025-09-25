@@ -25,6 +25,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=./build-rocksdb-common.sh
 source "${SCRIPT_DIR}/build-rocksdb-common.sh"
 
+if [[ -n "${MINGW_GCC_SYSROOT:-}" ]]; then
+  build_common::prepend_unique_path PATH "${MINGW_GCC_SYSROOT}/bin"
+  if [[ -z "${LLVM_MINGW_ROOT:-}" ]]; then
+    export LLVM_MINGW_ROOT="${MINGW_GCC_SYSROOT}"
+  fi
+fi
+
 if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
   build_common::prepend_unique_path PATH "${LLVM_MINGW_ROOT}/bin"
 fi
@@ -255,35 +262,20 @@ elif [[ "$OUTPUT_DIR" == *macos_arm64* ]]; then
   export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
-  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
-    export CC="${TOOLCHAIN_TRIPLE}-gcc"
-    export CXX="${TOOLCHAIN_TRIPLE}-g++"
-  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
-    export CC="${TOOLCHAIN_TRIPLE}-clang"
-    if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
-      export CXX="${TOOLCHAIN_TRIPLE}-clang++"
-    else
-      export CXX="${TOOLCHAIN_TRIPLE}-clang"
-    fi
-  else
-    echo "❌ Missing Windows x86_64 MinGW cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
-    echo "   Install an x86_64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
+  if ! command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    echo "❌ Missing Windows x86_64 MinGW GCC cross compiler (${TOOLCHAIN_TRIPLE}-gcc)." >&2
+    echo "   Install a GCC-based MinGW toolchain compatible with Kotlin/Native (e.g. msys2-mingw-w64-x86_64-2) and expose it via PATH." >&2
     exit 1
   fi
+  export CC="${TOOLCHAIN_TRIPLE}-gcc"
+  export CXX="${TOOLCHAIN_TRIPLE}-g++"
 
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
-    build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
-    build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
-  fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
-  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
-  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
-
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"
   elif command -v llvm-ar >/dev/null 2>&1; then
@@ -335,8 +327,10 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
-  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
-  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  if [[ "${CC}" == *"clang"* ]]; then
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  fi
 
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"

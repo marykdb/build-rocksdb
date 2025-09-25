@@ -30,6 +30,14 @@ WINDOWS_MIN_VERSION_C_FLAGS="-U_WIN32_WINNT -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A0
 WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_error"
 
 declare -a cmake_toolchain_flags=()
+USING_CLANG=0
+
+if [[ -n "${MINGW_GCC_SYSROOT:-}" ]]; then
+  build_common::prepend_unique_path PATH "${MINGW_GCC_SYSROOT}/bin"
+  if [[ -z "${LLVM_MINGW_ROOT:-}" ]]; then
+    export LLVM_MINGW_ROOT="${MINGW_GCC_SYSROOT}"
+  fi
+fi
 
 if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
   build_common::prepend_unique_path PATH "${LLVM_MINGW_ROOT}/bin"
@@ -47,6 +55,16 @@ case "$ARCH" in
     EXTRA_C_FLAGS="-march=x86-64 ${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="-march=x86-64 ${WINDOWS_MIN_VERSION_CXX_FLAGS}"
     BUILD_DIR="build/lib/mingw_x86_64"
+    if ! command -v "$CC" >/dev/null 2>&1; then
+      echo "Missing GCC toolchain binary: $CC" >&2
+      echo "Ensure a GCC-based MinGW-w64 toolchain (e.g. Kotlin/Native's msys2 bundle) is on PATH." >&2
+      exit 1
+    fi
+    if ! command -v "$CXX" >/dev/null 2>&1; then
+      echo "Missing GCC toolchain binary: $CXX" >&2
+      echo "Ensure a GCC-based MinGW-w64 toolchain (e.g. Kotlin/Native's msys2 bundle) is on PATH." >&2
+      exit 1
+    fi
     ;;
   i686)
     TOOLCHAIN_TRIPLE="i686-w64-mingw32"
@@ -65,6 +83,7 @@ case "$ARCH" in
     if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
       CC="${TOOLCHAIN_TRIPLE}-gcc"
       CXX="${TOOLCHAIN_TRIPLE}-g++"
+      USING_CLANG=0
     elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
       CC="${TOOLCHAIN_TRIPLE}-clang"
       if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
@@ -72,6 +91,7 @@ case "$ARCH" in
       else
         CXX="${TOOLCHAIN_TRIPLE}-clang"
       fi
+      USING_CLANG=1
     else
       echo "Unsupported ARM64 toolchain: expected ${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang in PATH" >&2
       exit 1
@@ -94,7 +114,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  if (( USING_CLANG )); then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
   fi
@@ -103,8 +123,10 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_C_FLAGS EXTRA_CXX_FLAGS "" cmake_toolchain_flags
   fi
 
-  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
-  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  if (( USING_CLANG )); then
+    build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  fi
 fi
 
 echo "Building RocksDB for Windows (MinGW) with ARCH=${ARCH}"
