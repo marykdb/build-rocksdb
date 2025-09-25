@@ -615,16 +615,28 @@ build_snappy() {
     echo "set(CMAKE_BUILD_TYPE Release)" >> "${toolchain_file}"
     echo "set(CMAKE_C_COMPILER_WORKS ON)" >> "${toolchain_file}"
     echo "set(CMAKE_CXX_COMPILER_WORKS ON)" >> "${toolchain_file}"
-    echo "set(CMAKE_16BIT_TYPE \"unsigned long\")" >> "${toolchain_file}"
+    echo "set(CMAKE_16BIT_TYPE \"unsigned short\")" >> "${toolchain_file}"
+    if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+      echo "set(CMAKE_C_BYTE_ORDER LITTLE_ENDIAN)" >> "${toolchain_file}"
+      echo "set(CMAKE_CXX_BYTE_ORDER LITTLE_ENDIAN)" >> "${toolchain_file}"
+    fi
     if [[ -n "${MINGW_INCLUDE_DIRECTORIES:-}" ]]; then
       echo "set(CMAKE_C_STANDARD_INCLUDE_DIRECTORIES \"\${CMAKE_C_STANDARD_INCLUDE_DIRECTORIES};${MINGW_INCLUDE_DIRECTORIES}\")" >> "${toolchain_file}"
       echo "set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES \"\${CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES};${MINGW_INCLUDE_DIRECTORIES}\")" >> "${toolchain_file}"
+      echo "set(CMAKE_REQUIRED_INCLUDES \"${MINGW_INCLUDE_DIRECTORIES}\")" >> "${toolchain_file}"
     fi
 
     snappy_toolchain_args+=( -DCMAKE_C_COMPILER="${CC}" -DCMAKE_CXX_COMPILER="${CXX}" -DCMAKE_TOOLCHAIN_FILE="${toolchain_file}" )
-    if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
-      snappy_toolchain_args+=( -DCMAKE_SYSTEM_NAME=Windows -DSNAPPY_IS_BIG_ENDIAN=0 )
-    fi
+  fi
+
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    snappy_toolchain_args+=(
+      -DCMAKE_SYSTEM_NAME=Windows
+      -DCMAKE_C_BYTE_ORDER=LITTLE_ENDIAN
+      -DCMAKE_CXX_BYTE_ORDER=LITTLE_ENDIAN
+      -DSNAPPY_IS_BIG_ENDIAN=0
+      -DHAVE_SNAPPY_IS_BIG_ENDIAN=1
+    )
   fi
 
   if [[ "$OUTPUT_DIR" == *android_arm32* ]]; then
@@ -651,6 +663,7 @@ build_snappy() {
     cmake_configure+=(
       "-DCMAKE_C_STANDARD_INCLUDE_DIRECTORIES=${MINGW_INCLUDE_DIRECTORIES}"
       "-DCMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES=${MINGW_INCLUDE_DIRECTORIES}"
+      "-DCMAKE_REQUIRED_INCLUDES=${MINGW_INCLUDE_DIRECTORIES}"
     )
   fi
 
@@ -663,16 +676,44 @@ build_snappy() {
     cmake_configure+=( -DCMAKE_SYSROOT="${cmake_sysroot}" )
   fi
   if [[ -n "${RC:-}" ]]; then
-    cmake_configure+=( -DCMAKE_RC_COMPILER="${RC}" )
+    local rc_path
+    rc_path="$(command -v "${RC}" 2>/dev/null || true)"
+    if [[ -n "${rc_path}" ]]; then
+      rc_path="$(build_common::to_tool_path "${rc_path}")"
+    else
+      rc_path="${RC}"
+    fi
+    cmake_configure+=( -DCMAKE_RC_COMPILER="${rc_path}" )
   fi
   if [[ -n "${AR:-}" ]]; then
-    cmake_configure+=( -DCMAKE_AR="${AR}" )
+    local ar_path
+    ar_path="$(command -v "${AR}" 2>/dev/null || true)"
+    if [[ -n "${ar_path}" ]]; then
+      ar_path="$(build_common::to_tool_path "${ar_path}")"
+    else
+      ar_path="${AR}"
+    fi
+    cmake_configure+=( -DCMAKE_AR="${ar_path}" )
   fi
   if [[ -n "${RANLIB:-}" ]]; then
-    cmake_configure+=( -DCMAKE_RANLIB="${RANLIB}" )
+    local ranlib_path
+    ranlib_path="$(command -v "${RANLIB}" 2>/dev/null || true)"
+    if [[ -n "${ranlib_path}" ]]; then
+      ranlib_path="$(build_common::to_tool_path "${ranlib_path}")"
+    else
+      ranlib_path="${RANLIB}"
+    fi
+    cmake_configure+=( -DCMAKE_RANLIB="${ranlib_path}" )
   fi
   if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
-    cmake_configure+=( -DCMAKE_SYSTEM_NAME=Windows -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY )
+    cmake_configure+=(
+      -DCMAKE_SYSTEM_NAME=Windows
+      -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY
+      -DCMAKE_C_BYTE_ORDER=LITTLE_ENDIAN
+      -DCMAKE_CXX_BYTE_ORDER=LITTLE_ENDIAN
+      -DSNAPPY_IS_BIG_ENDIAN=0
+      -DHAVE_SNAPPY_IS_BIG_ENDIAN=1
+    )
   fi
 
   cmake "${cmake_configure[@]}" ${EXTRA_CMAKEFLAGS} ${PLATFORM_CMAKE_FLAGS} .
