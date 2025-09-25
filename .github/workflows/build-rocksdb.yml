@@ -152,7 +152,11 @@ jobs:
           ARCHIVE_URL="https://github.com/JetBrains/kotlin/releases/download/v${KONAN_VERSION}/${ARCHIVE_NAME}"
           echo "Downloading Kotlin/Native toolchain ${KONAN_VERSION} from ${ARCHIVE_URL}"
           curl --fail --location --silent --show-error "$ARCHIVE_URL" --output "$ARCHIVE_PATH"
-          tar -xf "$ARCHIVE_PATH" -C "$TOOLCHAIN_DIR"
+          if command -v unzip >/dev/null 2>&1; then
+            unzip -q "$ARCHIVE_PATH" -d "$TOOLCHAIN_DIR"
+          else
+            powershell.exe -NoLogo -NoProfile -Command "Expand-Archive -Path '${ARCHIVE_PATH}' -DestinationPath '${TOOLCHAIN_DIR}' -Force"
+          fi
           rm -f "$ARCHIVE_PATH"
           KONAN_ROOT="$TOOLCHAIN_DIR/kotlin-native-prebuilt-windows-x86_64-${KONAN_VERSION}"
           TOOLCHAIN_ROOT="$KONAN_ROOT/dependencies/msys2-mingw-w64-x86_64-2"
@@ -203,15 +207,11 @@ jobs:
           TOOLCHAIN_DIR="$PWD/toolchains"
           mkdir -p "$TOOLCHAIN_DIR"
           rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
-          import pathlib, sys, zipfile
-
-          archive = pathlib.Path(sys.argv[1])
-          dest = pathlib.Path(sys.argv[2])
-          dest.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(archive) as zf:
-              zf.extractall(dest)
-          PY
+          if command -v unzip >/dev/null 2>&1; then
+            unzip -q "$ARCHIVE_PATH" -d "$TOOLCHAIN_DIR"
+          else
+            powershell.exe -NoLogo -NoProfile -Command "Expand-Archive -Path '${ARCHIVE_PATH}' -DestinationPath '${TOOLCHAIN_DIR}' -Force"
+          fi
           rm -f "$ARCHIVE_PATH"
           LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
           if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
