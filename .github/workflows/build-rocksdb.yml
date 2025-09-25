@@ -27,8 +27,8 @@ jobs:
             bash -lc './build.sh linuxX64'
       - uses: actions/upload-artifact@v4
         with:
-          name: rocksdb-linux-x64
-          path: build/archives/rocksdb-linux-x64.zip
+          name: rocksdb-linux-x86_64
+          path: build/archives/rocksdb-linux-x86_64.zip
 
   linux-arm64:
     name: Linux ARM64
