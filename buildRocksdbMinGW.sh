@@ -29,7 +29,7 @@ fi
 WINDOWS_MIN_VERSION_C_FLAGS="-U_WIN32_WINNT -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -pthread -include stdint.h"
 WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_error"
 
-declare -a cmake_toolchain_flags=()
+declare -a cmake_toolchain_flags=("-DCMAKE_SYSTEM_NAME=Windows")
 
 if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
   build_common::prepend_unique_path PATH "${LLVM_MINGW_ROOT}/bin"
@@ -40,10 +40,7 @@ case "$ARCH" in
     TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
     CC="${TOOLCHAIN_TRIPLE}-gcc"
     CXX="${TOOLCHAIN_TRIPLE}-g++"
-    cmake_toolchain_flags=(
-      "-DCMAKE_SYSTEM_NAME=Windows"
-      "-DCMAKE_SYSTEM_PROCESSOR=x86_64"
-    )
+    cmake_toolchain_flags+=("-DCMAKE_SYSTEM_PROCESSOR=x86_64")
     EXTRA_C_FLAGS="-march=x86-64 ${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="-march=x86-64 ${WINDOWS_MIN_VERSION_CXX_FLAGS}"
     BUILD_DIR="build/lib/mingw_x86_64"
@@ -52,10 +49,7 @@ case "$ARCH" in
     TOOLCHAIN_TRIPLE="i686-w64-mingw32"
     CC="${TOOLCHAIN_TRIPLE}-gcc"
     CXX="${TOOLCHAIN_TRIPLE}-g++"
-    cmake_toolchain_flags=(
-      "-DCMAKE_SYSTEM_NAME=Windows"
-      "-DCMAKE_SYSTEM_PROCESSOR=i686"
-    )
+    cmake_toolchain_flags+=("-DCMAKE_SYSTEM_PROCESSOR=i686")
     EXTRA_C_FLAGS="-march=i686 ${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="-march=i686 ${WINDOWS_MIN_VERSION_CXX_FLAGS}"
     BUILD_DIR="build/lib/mingw_i686"
@@ -76,10 +70,7 @@ case "$ARCH" in
       echo "Unsupported ARM64 toolchain: expected ${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang in PATH" >&2
       exit 1
     fi
-    cmake_toolchain_flags=(
-      "-DCMAKE_SYSTEM_NAME=Windows"
-      "-DCMAKE_SYSTEM_PROCESSOR=ARM64"
-    )
+    cmake_toolchain_flags+=("-DCMAKE_SYSTEM_PROCESSOR=ARM64")
     EXTRA_C_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS}"
     EXTRA_CXX_FLAGS="${WINDOWS_MIN_VERSION_CXX_FLAGS}"
     BUILD_DIR="build/lib/mingw_arm64"
@@ -94,7 +85,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  if build_common::compiler_is_clang "${CC}" || build_common::compiler_is_clang "${CXX}"; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
@@ -102,7 +93,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
 
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_C_FLAGS EXTRA_CXX_FLAGS "" cmake_toolchain_flags
-    if [[ "${CC}" == *"clang"* && -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+    if build_common::compiler_is_clang "${CC}" && [[ -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
       build_common::append_unique_flag EXTRA_C_FLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
       build_common::append_unique_flag EXTRA_CXX_FLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
     fi
@@ -112,10 +103,12 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     fi
   fi
 
-  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
-  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
-  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
-  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
+  cmake_toolchain_flags+=(
+    "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+    "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+    "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
+    "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
+  )
 fi
 
 echo "Building RocksDB for Windows (MinGW) with ARCH=${ARCH}"
@@ -135,19 +128,12 @@ mkdir -p "$BUILD_DIR"
 
 NUM_CORES="$(build_common::default_parallel_jobs)"
 
-cmake_args=()
-if ((${#cmake_toolchain_flags[@]})); then
-  cmake_args+=("${cmake_toolchain_flags[@]}")
-fi
-
-cmake_args+=(
+cmake_args=(
+  "${cmake_toolchain_flags[@]}"
   -G "Ninja"
   -DCMAKE_MAKE_PROGRAM=ninja
-)
-
-cmake_args+=(
-  -DCMAKE_C_COMPILER="$CC"
-  -DCMAKE_CXX_COMPILER="$CXX"
+  "-DCMAKE_C_COMPILER=${CC}"
+  "-DCMAKE_CXX_COMPILER=${CXX}"
 )
 
 build_common::cmake_configure \

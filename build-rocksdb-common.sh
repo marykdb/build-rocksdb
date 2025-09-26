@@ -23,6 +23,31 @@ build_common::append_unique_flag() {
   printf -v "$var_name" '%s' "$current"
 }
 
+build_common::compiler_is_clang() {
+  local compiler="$1"
+  if [[ -z "$compiler" ]]; then
+    return 1
+  fi
+
+  if [[ "$compiler" == *"clang"* ]]; then
+    return 0
+  fi
+
+  local compiler_path
+  compiler_path="$(command -v "$compiler" 2>/dev/null || true)"
+  if [[ -z "$compiler_path" ]]; then
+    return 1
+  fi
+
+  local version_output
+  version_output="$("$compiler_path" --version 2>/dev/null || true)"
+  if [[ "$version_output" == *"clang"* || "$version_output" == *"LLVM"* ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 build_common::is_windows_host() {
   case "$(uname -s 2>/dev/null || echo unknown)" in
     MINGW*|MSYS*|CYGWIN*) return 0 ;;
