@@ -370,8 +370,10 @@ build_common::apply_mingw_sysroot_flags() {
 
   local include_semicolon_list=""
   local libcxx_semicolon_list=""
+  local libstdcxx_semicolon_list=""
   local -a c_include_tool_paths=()
   local -a libcxx_tool_paths=()
+  local -a libstdcxx_tool_paths=()
 
   if [[ -n "$cmake_flags_var" ]]; then
     build_common::append_unique_flag "$cmake_flags_var" "$(build_common::shell_escape "-DCMAKE_SYSROOT=${sysroot_tool_path}")"
@@ -497,34 +499,72 @@ build_common::apply_mingw_sysroot_flags() {
         if [[ -f "${cxx_version_dir}/vector" || -f "${cxx_version_dir}/string" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
           local cxx_tool_path
           cxx_tool_path="$(build_common::to_tool_path "$cxx_version_dir")"
-          local already_libcxx_dir=0
-          for listed_path in "${libcxx_tool_paths[@]}"; do
-            if [[ "$listed_path" == "$cxx_tool_path" ]]; then
-              already_libcxx_dir=1
-              break
-            fi
-          done
-          if (( !already_libcxx_dir )); then
-            libcxx_tool_paths+=("$cxx_tool_path")
+          local has_libstdcxx_headers=0
+          if [[ -f "${cxx_version_dir}/bits/c++config.h" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
+            has_libstdcxx_headers=1
           fi
-          if [[ -n "$cxx_tool_path" ]]; then
-            case ";${libcxx_semicolon_list};" in
-              *";${cxx_tool_path};"*) ;;
-              *)
-                if [[ -n "$libcxx_semicolon_list" ]]; then
-                  libcxx_semicolon_list+=";"
-                fi
-                libcxx_semicolon_list+="$cxx_tool_path"
-                ;;
-            esac
+          if (( has_libstdcxx_headers )); then
+            local already_libstdcxx_dir=0
+            for listed_path in "${libstdcxx_tool_paths[@]}"; do
+              if [[ "$listed_path" == "$cxx_tool_path" ]]; then
+                already_libstdcxx_dir=1
+                break
+              fi
+            done
+            if (( !already_libstdcxx_dir )); then
+              libstdcxx_tool_paths+=("$cxx_tool_path")
+            fi
+            if [[ -n "$cxx_tool_path" ]]; then
+              case ";${libstdcxx_semicolon_list};" in
+                *";${cxx_tool_path};"*) ;;
+                *)
+                  if [[ -n "$libstdcxx_semicolon_list" ]]; then
+                    libstdcxx_semicolon_list+=";"
+                  fi
+                  libstdcxx_semicolon_list+="$cxx_tool_path"
+                  ;;
+              esac
+            fi
+          else
+            local already_libcxx_dir=0
+            for listed_path in "${libcxx_tool_paths[@]}"; do
+              if [[ "$listed_path" == "$cxx_tool_path" ]]; then
+                already_libcxx_dir=1
+                break
+              fi
+            done
+            if (( !already_libcxx_dir )); then
+              libcxx_tool_paths+=("$cxx_tool_path")
+            fi
+            if [[ -n "$cxx_tool_path" ]]; then
+              case ";${libcxx_semicolon_list};" in
+                *";${cxx_tool_path};"*) ;;
+                *)
+                  if [[ -n "$libcxx_semicolon_list" ]]; then
+                    libcxx_semicolon_list+=";"
+                  fi
+                  libcxx_semicolon_list+="$cxx_tool_path"
+                  ;;
+              esac
+            fi
           fi
         fi
       done < <(find "${root}/c++" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
     fi
   done
 
+  local -a selected_cxx_tool_paths=()
+  local selected_cxx_semicolon_list=""
+  if (( ${#libstdcxx_tool_paths[@]} > 0 )); then
+    selected_cxx_tool_paths=("${libstdcxx_tool_paths[@]}")
+    selected_cxx_semicolon_list="$libstdcxx_semicolon_list"
+  else
+    selected_cxx_tool_paths=("${libcxx_tool_paths[@]}")
+    selected_cxx_semicolon_list="$libcxx_semicolon_list"
+  fi
+
   local path
-  for path in "${libcxx_tool_paths[@]}"; do
+  for path in "${selected_cxx_tool_paths[@]}"; do
     build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
   done
   for path in "${c_include_tool_paths[@]}"; do
@@ -533,8 +573,8 @@ build_common::apply_mingw_sysroot_flags() {
   done
 
   local final_semicolon_list=""
-  if [[ -n "$libcxx_semicolon_list" ]]; then
-    final_semicolon_list="$libcxx_semicolon_list"
+  if [[ -n "$selected_cxx_semicolon_list" ]]; then
+    final_semicolon_list="$selected_cxx_semicolon_list"
   fi
   if [[ -n "$include_semicolon_list" ]]; then
     if [[ -n "$final_semicolon_list" ]]; then

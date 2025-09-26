@@ -277,12 +277,28 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   if [[ "${CC}" == *"clang"* ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
+
+  for mingw_runtime_lib in -lstdc++ -lsupc++ -lgcc -lwinpthread; do
+    case " ${EXTRA_LDFLAGS} " in
+      *" ${mingw_runtime_lib} "*) ;;
+      *)
+        if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+          EXTRA_LDFLAGS+=" ${mingw_runtime_lib}"
+        else
+          EXTRA_LDFLAGS="${mingw_runtime_lib}"
+        fi
+        ;;
+    esac
+  done
 
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"
@@ -331,12 +347,28 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   if [[ "${CC}" == *"clang"* ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
+
+  for mingw_runtime_lib in -lstdc++ -lsupc++ -lgcc -lwinpthread; do
+    case " ${EXTRA_LDFLAGS} " in
+      *" ${mingw_runtime_lib} "*) ;;
+      *)
+        if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+          EXTRA_LDFLAGS+=" ${mingw_runtime_lib}"
+        else
+          EXTRA_LDFLAGS="${mingw_runtime_lib}"
+        fi
+        ;;
+    esac
+  done
 
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"

@@ -97,6 +97,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   if [[ "${CC}" == *"clang"* ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
   fi
 
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
@@ -105,6 +106,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
 
   build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
+  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
 fi
 
 echo "Building RocksDB for Windows (MinGW) with ARCH=${ARCH}"
