@@ -274,7 +274,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  if build_common::compiler_is_clang "${CC}"; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
@@ -282,7 +282,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
-  if [[ "${CC}" == *"clang"* && -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+  if build_common::compiler_is_clang "${CC}" && [[ -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
   fi
@@ -359,7 +359,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  if build_common::compiler_is_clang "${CC}"; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
@@ -367,7 +367,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
-  if [[ "${CC}" == *"clang"* && -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+  if build_common::compiler_is_clang "${CC}" && [[ -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
   fi
