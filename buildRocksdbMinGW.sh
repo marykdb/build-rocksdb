@@ -102,6 +102,14 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
 
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_C_FLAGS EXTRA_CXX_FLAGS "" cmake_toolchain_flags
+    if [[ "${CC}" == *"clang"* && -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+      build_common::append_unique_flag EXTRA_C_FLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+      build_common::append_unique_flag EXTRA_CXX_FLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+    fi
+    if [[ -n "${MINGW_LIBRARY_DIRECTORIES:-}" ]]; then
+      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_SYSTEM_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+    fi
   fi
 
   build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"

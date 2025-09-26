@@ -362,6 +362,10 @@ build_common::apply_mingw_sysroot_flags() {
     return 0
   fi
 
+  unset MINGW_LIBRARY_SEARCH_FLAGS
+  unset MINGW_LIBRARY_DIRECTORIES
+  unset MINGW_GCC_TOOLCHAIN_ROOT
+
   local sysroot_tool_path
   sysroot_tool_path="$(build_common::to_tool_path "$sysroot")"
 
@@ -586,6 +590,168 @@ build_common::apply_mingw_sysroot_flags() {
   if [[ -n "$final_semicolon_list" ]]; then
     export MINGW_INCLUDE_DIRECTORIES="$final_semicolon_list"
   fi
+
+  local -a runtime_dir_candidates=()
+  runtime_dir_candidates+=("${sysroot}/lib")
+  runtime_dir_candidates+=("${sysroot}/lib64")
+  if [[ -n "$triple" ]]; then
+    runtime_dir_candidates+=("${sysroot}/${triple}/lib")
+    runtime_dir_candidates+=("${sysroot}/${triple}/lib64")
+    if [[ -d "${sysroot}/lib/gcc/${triple}" ]]; then
+      while IFS= read -r gcc_version_dir; do
+        if [[ -n "$gcc_version_dir" ]]; then
+          runtime_dir_candidates+=("$gcc_version_dir")
+        fi
+      done < <(find "${sysroot}/lib/gcc/${triple}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+    fi
+  fi
+
+  if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
+    runtime_dir_candidates+=("${sysroot_parent}/lib")
+    runtime_dir_candidates+=("${sysroot_parent}/lib64")
+    if [[ -n "$triple" ]]; then
+      runtime_dir_candidates+=("${sysroot_parent}/${triple}/lib")
+      runtime_dir_candidates+=("${sysroot_parent}/${triple}/lib64")
+      if [[ -d "${sysroot_parent}/lib/gcc/${triple}" ]]; then
+        while IFS= read -r parent_gcc_dir; do
+          if [[ -n "$parent_gcc_dir" ]]; then
+            runtime_dir_candidates+=("$parent_gcc_dir")
+          fi
+        done < <(find "${sysroot_parent}/lib/gcc/${triple}" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+      fi
+    fi
+  fi
+
+  local -a processed_runtime_dirs=()
+  local -a runtime_tool_paths=()
+  local -a runtime_flag_list=()
+  local runtime_semicolon_list=""
+
+  local runtime_candidate
+  for runtime_candidate in "${runtime_dir_candidates[@]}"; do
+    if [[ -z "$runtime_candidate" || ! -d "$runtime_candidate" ]]; then
+      continue
+    fi
+
+    local already_seen=0
+    local recorded_dir
+    for recorded_dir in "${processed_runtime_dirs[@]}"; do
+      if [[ "$recorded_dir" == "$runtime_candidate" ]]; then
+        already_seen=1
+        break
+      fi
+    done
+    if (( already_seen )); then
+      continue
+    fi
+
+    local has_runtime_lib=0
+    local runtime_lib
+    for runtime_lib in libstdc++.a libstdc++.dll.a libsupc++.a libgcc.a libgcc_eh.a libwinpthread.a; do
+      if [[ -f "${runtime_candidate}/${runtime_lib}" ]]; then
+        has_runtime_lib=1
+        break
+      fi
+    done
+
+    if (( !has_runtime_lib )); then
+      continue
+    fi
+
+    processed_runtime_dirs+=("$runtime_candidate")
+    local runtime_tool_path
+    runtime_tool_path="$(build_common::to_tool_path "$runtime_candidate")"
+    if [[ -z "$runtime_tool_path" ]]; then
+      continue
+    fi
+
+    local already_recorded=0
+    local existing_tool
+    for existing_tool in "${runtime_tool_paths[@]}"; do
+      if [[ "$existing_tool" == "$runtime_tool_path" ]]; then
+        already_recorded=1
+        break
+      fi
+    done
+    if (( already_recorded )); then
+      continue
+    fi
+
+    runtime_tool_paths+=("$runtime_tool_path")
+    if [[ -n "$runtime_semicolon_list" ]]; then
+      runtime_semicolon_list+=";"
+    fi
+    runtime_semicolon_list+="$runtime_tool_path"
+
+    local runtime_flag="-L${runtime_tool_path}"
+    local flag_recorded=0
+    local existing_flag
+    for existing_flag in "${runtime_flag_list[@]}"; do
+      if [[ "$existing_flag" == "$runtime_flag" ]]; then
+        flag_recorded=1
+        break
+      fi
+    done
+    if (( !flag_recorded )); then
+      runtime_flag_list+=("$runtime_flag")
+    fi
+  done
+
+  if (( ${#runtime_flag_list[@]} > 0 )); then
+    local joined_flags=""
+    local flag
+    for flag in "${runtime_flag_list[@]}"; do
+      if [[ -n "$joined_flags" ]]; then
+        joined_flags+=" "
+      fi
+      joined_flags+="$flag"
+    done
+    export MINGW_LIBRARY_SEARCH_FLAGS="$joined_flags"
+  fi
+
+  if [[ -n "$runtime_semicolon_list" ]]; then
+    export MINGW_LIBRARY_DIRECTORIES="$runtime_semicolon_list"
+  fi
+
+  if [[ -n "$triple" ]]; then
+    local -a toolchain_candidates=("$sysroot")
+    if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
+      toolchain_candidates+=("$sysroot_parent")
+    fi
+
+    local toolchain_root=""
+    local candidate_root
+    for candidate_root in "${toolchain_candidates[@]}"; do
+      if [[ -z "$candidate_root" || ! -d "$candidate_root" ]]; then
+        continue
+      fi
+      if [[ -x "${candidate_root}/bin/${triple}-gcc" || -x "${candidate_root}/bin/${triple}-g++" ]]; then
+        toolchain_root="$(cd "$candidate_root" 2>/dev/null && pwd 2>/dev/null || true)"
+        if [[ -n "$toolchain_root" ]]; then
+          break
+        fi
+      fi
+    done
+
+    if [[ -z "$toolchain_root" ]]; then
+      local gcc_base="${sysroot}/lib/gcc/${triple}"
+      if [[ -d "$gcc_base" ]]; then
+        local version_dir
+        version_dir="$(find "$gcc_base" -mindepth 1 -maxdepth 1 -type d -print -quit 2>/dev/null || true)"
+        if [[ -n "$version_dir" ]]; then
+          toolchain_root="$(cd "${version_dir}/../../.." 2>/dev/null && pwd 2>/dev/null || true)"
+        fi
+      fi
+    fi
+
+    if [[ -n "$toolchain_root" ]]; then
+      local toolchain_tool_path
+      toolchain_tool_path="$(build_common::to_tool_path "$toolchain_root")"
+      if [[ -n "$toolchain_tool_path" ]]; then
+        export MINGW_GCC_TOOLCHAIN_ROOT="$toolchain_tool_path"
+      fi
+    fi
+  fi
 }
 
 build_common::ensure_mingw_environment() {
@@ -705,11 +871,20 @@ build_common::cmake_configure() {
 
   build_common::warn_missing_snappy "$snappy_config_path"
 
+  local cmake_library_path="$dependency_lib_dir"
+  if [[ -n "${MINGW_LIBRARY_DIRECTORIES:-}" ]]; then
+    if [[ -n "$cmake_library_path" ]]; then
+      cmake_library_path+=";${MINGW_LIBRARY_DIRECTORIES}"
+    else
+      cmake_library_path="${MINGW_LIBRARY_DIRECTORIES}"
+    fi
+  fi
+
   local -a common_args=(
     -DCMAKE_PREFIX_PATH="$snappy_prefix"
     -DSnappy_DIR="$snappy_cmake_dir"
     -DCMAKE_INCLUDE_PATH="${dependency_include_root};${dependency_headers_dir}"
-    -DCMAKE_LIBRARY_PATH="$dependency_lib_dir"
+    -DCMAKE_LIBRARY_PATH="$cmake_library_path"
     -DZLIB_INCLUDE_DIR="$dependency_headers_dir"
     -DZLIB_LIBRARY="${dependency_lib_dir}/libz.a"
     -DZLIB_USE_STATIC_LIBS=ON

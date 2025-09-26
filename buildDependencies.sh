@@ -282,6 +282,21 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
+  if [[ "${CC}" == *"clang"* && -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+  fi
+  if [[ -n "${MINGW_LIBRARY_SEARCH_FLAGS:-}" ]]; then
+    if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+      EXTRA_LDFLAGS+=" ${MINGW_LIBRARY_SEARCH_FLAGS}"
+    else
+      EXTRA_LDFLAGS="${MINGW_LIBRARY_SEARCH_FLAGS}"
+    fi
+  fi
+  if [[ -n "${MINGW_LIBRARY_DIRECTORIES:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_SYSTEM_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+  fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
@@ -351,6 +366,21 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
+  fi
+  if [[ "${CC}" == *"clang"* && -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+  fi
+  if [[ -n "${MINGW_LIBRARY_SEARCH_FLAGS:-}" ]]; then
+    if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+      EXTRA_LDFLAGS+=" ${MINGW_LIBRARY_SEARCH_FLAGS}"
+    else
+      EXTRA_LDFLAGS="${MINGW_LIBRARY_SEARCH_FLAGS}"
+    fi
+  fi
+  if [[ -n "${MINGW_LIBRARY_DIRECTORIES:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_SYSTEM_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
   fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
