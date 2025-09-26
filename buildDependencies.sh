@@ -274,15 +274,46 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  if build_common::compiler_is_clang "${CC}"; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
+  if build_common::compiler_is_clang "${CC}" && [[ -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+  fi
+  if [[ -n "${MINGW_LIBRARY_SEARCH_FLAGS:-}" ]]; then
+    if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+      EXTRA_LDFLAGS+=" ${MINGW_LIBRARY_SEARCH_FLAGS}"
+    else
+      EXTRA_LDFLAGS="${MINGW_LIBRARY_SEARCH_FLAGS}"
+    fi
+  fi
+  if [[ -n "${MINGW_LIBRARY_DIRECTORIES:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_SYSTEM_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+  fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
+
+  for mingw_runtime_lib in -lstdc++ -lsupc++ -lgcc -lwinpthread; do
+    case " ${EXTRA_LDFLAGS} " in
+      *" ${mingw_runtime_lib} "*) ;;
+      *)
+        if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+          EXTRA_LDFLAGS+=" ${mingw_runtime_lib}"
+        else
+          EXTRA_LDFLAGS="${mingw_runtime_lib}"
+        fi
+        ;;
+    esac
+  done
 
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"
@@ -328,15 +359,46 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  if build_common::compiler_is_clang "${CC}"; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
+  if build_common::compiler_is_clang "${CC}" && [[ -n "${MINGW_GCC_TOOLCHAIN_ROOT:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "--gcc-toolchain=${MINGW_GCC_TOOLCHAIN_ROOT}"
+  fi
+  if [[ -n "${MINGW_LIBRARY_SEARCH_FLAGS:-}" ]]; then
+    if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+      EXTRA_LDFLAGS+=" ${MINGW_LIBRARY_SEARCH_FLAGS}"
+    else
+      EXTRA_LDFLAGS="${MINGW_LIBRARY_SEARCH_FLAGS}"
+    fi
+  fi
+  if [[ -n "${MINGW_LIBRARY_DIRECTORIES:-}" ]]; then
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_SYSTEM_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+    build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_LIBRARY_PATH=${MINGW_LIBRARY_DIRECTORIES}"
+  fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_STANDARD_LIBRARIES=-lgcc;-lwinpthread"
+  build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_CXX_STANDARD_LIBRARIES=-lstdc++;-lsupc++;-lgcc;-lwinpthread"
+
+  for mingw_runtime_lib in -lstdc++ -lsupc++ -lgcc -lwinpthread; do
+    case " ${EXTRA_LDFLAGS} " in
+      *" ${mingw_runtime_lib} "*) ;;
+      *)
+        if [[ -n "${EXTRA_LDFLAGS}" ]]; then
+          EXTRA_LDFLAGS+=" ${mingw_runtime_lib}"
+        else
+          EXTRA_LDFLAGS="${mingw_runtime_lib}"
+        fi
+        ;;
+    esac
+  done
 
   if command -v "${TOOLCHAIN_TRIPLE}-ar" >/dev/null 2>&1; then
     export AR="${TOOLCHAIN_TRIPLE}-ar"
