@@ -41,6 +41,14 @@ The archives are staged under `build/archives/` during a build and can be publis
 - Similarly, simulator builds for iOS, watchOS, and tvOS are arm64-only—aside from the macOS x86_64 build, there are no simulator x86_64 variants because developers are expected to be on Apple Silicon hardware five years after its introduction.
 - The `watchos-arm64` archive labelled above uses the `arm64_32` ABI (64-bit registers with 32-bit pointers) because that remains the deployment baseline for physical watches.
 
+### Windows (MinGW) builds and Kotlin/Native
+
+Kotlin/Native ships a complete MinGW-w64 GCC toolchain under `~/.konan/dependencies/msys2-mingw-w64-<arch>-2` on Windows hosts. Those bundles already contain the GCC runtime (`libstdc++`, `libsupc++`, `libgcc`, `libwinpthread`, …), which is what Kotlin/Native links against. To ensure the RocksDB archives remain compatible with that runtime:
+
+1. Install or unpack a MinGW toolchain that matches Kotlin/Native (for example, reuse the contents of `~/.konan/dependencies/msys2-mingw-w64-x86_64-2`). If you keep the toolchain elsewhere, set `KONAN_MINGW_ROOT` to the directory that contains the `mingw64/`, `mingw32/`, or `aarch64/` subfolders before invoking `build.sh`.
+2. The build scripts will automatically add the corresponding `bin/` directory to `PATH` and pick up `x86_64-w64-mingw32-gcc`, `i686-w64-mingw32-gcc`, or `aarch64-w64-mingw32-gcc` for the Windows targets. No `-stdlib=libc++` flags are injected, so RocksDB links exclusively against libstdc++.
+3. Archives assembled from MinGW builds only include `librocksdb.a`, `libsnappy.a`, `libzstd.a`, `libbz2.a`, `libz.a`, and `liblz4.a`. Kotlin/Native's own toolchain continues to provide the GCC runtime when consumers link their applications.
+
 ## Usage examples
 - List available build configurations:
   ```bash

@@ -255,6 +255,7 @@ elif [[ "$OUTPUT_DIR" == *macos_arm64* ]]; then
   export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
+  build_common::maybe_add_konan_mingw_to_path "$TOOLCHAIN_TRIPLE"
   if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
     export CC="${TOOLCHAIN_TRIPLE}-gcc"
     export CXX="${TOOLCHAIN_TRIPLE}-g++"
@@ -309,6 +310,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   fi
 elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
+  build_common::maybe_add_konan_mingw_to_path "$TOOLCHAIN_TRIPLE"
   if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
     export CC="${TOOLCHAIN_TRIPLE}-gcc"
     export CXX="${TOOLCHAIN_TRIPLE}-g++"

@@ -38,6 +38,7 @@ fi
 case "$ARCH" in
   x86_64)
     TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
+    build_common::maybe_add_konan_mingw_to_path "$TOOLCHAIN_TRIPLE"
     CC="${TOOLCHAIN_TRIPLE}-gcc"
     CXX="${TOOLCHAIN_TRIPLE}-g++"
     cmake_toolchain_flags=(
@@ -50,6 +51,7 @@ case "$ARCH" in
     ;;
   i686)
     TOOLCHAIN_TRIPLE="i686-w64-mingw32"
+    build_common::maybe_add_konan_mingw_to_path "$TOOLCHAIN_TRIPLE"
     CC="${TOOLCHAIN_TRIPLE}-gcc"
     CXX="${TOOLCHAIN_TRIPLE}-g++"
     cmake_toolchain_flags=(
@@ -62,6 +64,7 @@ case "$ARCH" in
     ;;
   arm64|aarch64)
     TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
+    build_common::maybe_add_konan_mingw_to_path "$TOOLCHAIN_TRIPLE"
     if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
       CC="${TOOLCHAIN_TRIPLE}-gcc"
       CXX="${TOOLCHAIN_TRIPLE}-g++"

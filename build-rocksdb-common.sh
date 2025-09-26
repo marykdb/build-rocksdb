@@ -219,6 +219,85 @@ build_common::prepend_unique_path() {
   fi
 }
 
+build_common::maybe_add_konan_mingw_to_path() {
+  local triple="$1"
+  if [[ -z "$triple" ]]; then
+    return 1
+  fi
+
+  local arch_suffix=""
+  local -a preferred_bin_suffixes=("bin" "${triple}/bin")
+  case "$triple" in
+    x86_64-w64-mingw32)
+      arch_suffix="x86_64"
+      preferred_bin_suffixes+=("mingw64/bin" "ucrt64/bin" "clang64/bin")
+      ;;
+    i686-w64-mingw32)
+      arch_suffix="i686"
+      preferred_bin_suffixes+=("mingw32/bin")
+      ;;
+    aarch64-w64-mingw32)
+      arch_suffix="aarch64"
+      preferred_bin_suffixes+=("aarch64/bin")
+      ;;
+    *)
+      arch_suffix="${triple%%-*}"
+      ;;
+  esac
+
+  local -a candidate_roots=()
+  if [[ -n "${KONAN_MINGW_ROOT:-}" ]]; then
+    candidate_roots+=("${KONAN_MINGW_ROOT}")
+  fi
+
+  local konan_base="${HOME}/.konan/dependencies"
+  if [[ -n "$arch_suffix" ]]; then
+    candidate_roots+=(
+      "${konan_base}/msys2-mingw-w64-${arch_suffix}-2"
+      "${konan_base}/msys2-mingw-w64-${arch_suffix}"
+    )
+  fi
+  candidate_roots+=("${konan_base}")
+
+  local root
+  for root in "${candidate_roots[@]}"; do
+    [[ -d "$root" ]] || continue
+
+    local suffix
+    for suffix in "${preferred_bin_suffixes[@]}"; do
+      local candidate="${root%/}/${suffix}"
+      if [[ -d "$candidate" ]]; then
+        if [[ -x "${candidate}/${triple}-gcc" || -x "${candidate}/${triple}-gcc.exe" || -x "${candidate}/${triple}-clang" || -x "${candidate}/${triple}-clang.exe" ]]; then
+          build_common::prepend_unique_path PATH "$candidate"
+          return 0
+        fi
+      fi
+    done
+
+    local had_nullglob=0
+    if shopt -q nullglob; then
+      had_nullglob=1
+    fi
+    shopt -s nullglob
+    local nested_bin
+    for nested_bin in "${root%/}"/*/bin; do
+      [[ -d "$nested_bin" ]] || continue
+      if [[ -x "${nested_bin}/${triple}-gcc" || -x "${nested_bin}/${triple}-gcc.exe" || -x "${nested_bin}/${triple}-clang" || -x "${nested_bin}/${triple}-clang.exe" ]]; then
+        build_common::prepend_unique_path PATH "$nested_bin"
+        if (( had_nullglob == 0 )); then
+          shopt -u nullglob
+        fi
+        return 0
+      fi
+    done
+    if (( had_nullglob == 0 )); then
+      shopt -u nullglob
+    fi
+  done
+
+  return 1
+}
+
 build_common::detect_llvm_mingw_root() {
   local triple="$1"
   local compiler_path="${2:-}"

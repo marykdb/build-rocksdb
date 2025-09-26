@@ -553,13 +553,38 @@ package_artifacts() {
     cp "$header" "$dest"
   done < <(find "$include_base" -type f \( -name '*.h' -o -name '*.hh' -o -name '*.hpp' -o -name '*.hxx' -o -name '*.inc' -o -name '*.ipp' \) -print0)
 
-  while IFS= read -r -d '' libfile; do
-    local rel dest
-    rel="${libfile#${lib_base}/}"
-    dest="$staging/lib/${rel}"
-    mkdir -p "$(dirname "$dest")"
-    cp "$libfile" "$dest"
-  done < <(find "$lib_base" -maxdepth 1 -type f -name '*.a' -print0)
+  local -a libs_to_package=(
+    librocksdb.a
+    libsnappy.a
+    libzstd.a
+    libbz2.a
+    libz.a
+    liblz4.a
+  )
+  local -a lib_search_dirs=(
+    "$lib_base"
+    "$lib_base/dependencies"
+    "$lib_base/lib"
+    "$lib_base/lib64"
+    "$lib_base/rocksdb-build"
+    "$lib_base/rocksdb-build/lib"
+  )
+
+  local lib_name
+  for lib_name in "${libs_to_package[@]}"; do
+    local found=""
+    local search_dir
+    for search_dir in "${lib_search_dirs[@]}"; do
+      if [[ -f "${search_dir}/${lib_name}" ]]; then
+        found="${search_dir}/${lib_name}"
+        break
+      fi
+    done
+    if [[ -z "$found" ]]; then
+      fail "Required library ${lib_name} not found under ${lib_base}"
+    fi
+    cp "$found" "$staging/lib/${lib_name}"
+  done
 
   mkdir -p "$PROJECT_ROOT/build/archives"
   local archive_path="$PROJECT_ROOT/build/archives/${artifact}"
