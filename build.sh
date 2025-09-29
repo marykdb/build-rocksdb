@@ -13,6 +13,7 @@ When no CONFIG values are provided, all configurations for the current host are 
 
 Options:
   --list                     List available build configurations and exit.
+  --konan-version <version>  Override the Kotlin/Native version used for toolchain provisioning.
   -h, --help                 Show this help message and exit.
 
 Configs:
@@ -42,6 +43,10 @@ resolve_host() {
 
 HOST_PLATFORM="$(resolve_host)"
 HOST_ARCH="$(uname -m | tr '[:upper:]' '[:lower:]')"
+
+DEFAULT_KONAN_VERSION="2.2.20"
+REQUESTED_KONAN_VERSION="$DEFAULT_KONAN_VERSION"
+declare -A KONAN_TARGETS_PREPARED=()
 
 MINIMUM_CMAKE_VERSION="3.12.0"
 BOOTSTRAP_CMAKE_VERSION="3.27.9"
@@ -137,6 +142,45 @@ ensure_modern_cmake() {
   rm -f "$download_path"
 
   export PATH="${install_dir}/bin:${PATH}"
+}
+
+ensure_konan_target_installed() {
+  local target="$1"
+  if [[ "$HOST_PLATFORM" != "WINDOWS" ]]; then
+    return
+  fi
+  if [[ -n "${KONAN_TARGETS_PREPARED[$target]:-}" ]]; then
+    return
+  fi
+
+  local env_file
+  env_file="$(mktemp)"
+  if ! "$PROJECT_ROOT/scripts/setup-konan.sh" \
+    --target "$target" \
+    --version "$REQUESTED_KONAN_VERSION" \
+    --output "$env_file" \
+    --no-print-shell; then
+    rm -f "$env_file"
+    fail "Failed to prepare Kotlin/Native toolchain for target ${target}"
+  fi
+
+  # shellcheck disable=SC1090
+  source "$env_file"
+  rm -f "$env_file"
+  KONAN_TARGETS_PREPARED[$target]=1
+}
+
+prepare_toolchains_for_config() {
+  local config="$1"
+  if [[ "$HOST_PLATFORM" != "WINDOWS" ]]; then
+    return
+  fi
+
+  case "$config" in
+    mingwX64)
+      ensure_konan_target_installed "mingw_x64"
+      ;;
+  esac
 }
 
 declare -a CONFIG_IDS=()
@@ -581,6 +625,7 @@ build_config() {
     fail "Skipping $config because it requires host $(config_host "$config")"
   fi
 
+  prepare_toolchains_for_config "$config"
   build_dependencies "$config"
   run_build_script "$config"
   package_artifacts "$config"
@@ -594,6 +639,13 @@ main() {
       --list)
         list_configs
         exit 0
+        ;;
+      --konan-version)
+        if [[ $# -lt 2 ]]; then
+          fail "Missing value for --konan-version"
+        fi
+        REQUESTED_KONAN_VERSION="$2"
+        shift 2
         ;;
       -h|--help)
         usage

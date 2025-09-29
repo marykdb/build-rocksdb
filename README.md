@@ -5,7 +5,8 @@ This repository automates building and packaging static RocksDB distributions wi
 
 ## Build workflow
 1. `build.sh` resolves the active host platform, accepts an optional Kotlin/Native version, and selects the configurations to compile (defaults are picked per host when no explicit list is provided).
-2. Kotlin/Native toolchains are installed on demand for cross-compilation targets before each build step runs.
+2. Kotlin/Native toolchains are installed on demand for cross-compilation targets before each build step runs. Windows MinGW
+   builds fetch the Kotlin/Native 2.2.20 distribution and reuse its bundled MSYS2 toolchain.
 3. The RocksDB headers from the `rocksdb` submodule are copied into `build/include` so that every archive ships a consistent header set.
 4. `buildDependencies.sh` fetches, verifies, and builds static `zlib`, `bzip2`, `zstd`, `snappy`, and `lz4` libraries for the requested target into `build/lib/<target>/`.
 5. The relevant platform script (`buildRocksdbLinux.sh`, `buildRocksdbMinGW.sh`, `buildRocksdbApple.sh`, or `buildRocksdbAndroid.sh`) compiles RocksDB itself for the configuration that is being processed.
@@ -52,7 +53,7 @@ The archives are staged under `build/archives/` during a build and can be publis
   ```
 - Build a specific archive while overriding the Kotlin/Native version used for toolchain provisioning:
   ```bash
-  ./build.sh --konan-version 2.0.21 iosArm64
+  ./build.sh --konan-version 2.2.20 iosArm64
   ```
   The `--konan-version` flag applies to every configuration in the invocation.
 
