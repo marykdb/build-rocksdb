@@ -98,6 +98,18 @@ fi
 
 mkdir -p "$POSIX_TOOLCHAINS_DIR"
 
+# Ensure the Kotlin/Native data directory exists ahead of time so that
+# dependency downloads succeed even if the JVM tooling does not create the
+# directory structure automatically.
+POSIX_KONAN_DATA_DIR_PRESET="$(
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -u "$KONAN_DATA_ENV"
+  else
+    printf '%s' "$KONAN_DATA_ENV"
+  fi
+)"
+mkdir -p "$POSIX_KONAN_DATA_DIR_PRESET"
+
 KONAN_ARCHIVE="kotlin-native-prebuilt-windows-x86_64-${KONAN_VERSION}.zip"
 if [[ -n "$KOTLIN_RELEASE_URL_OVERRIDE" ]]; then
   KONAN_ARCHIVE_URL="$KOTLIN_RELEASE_URL_OVERRIDE"
@@ -158,8 +170,17 @@ EOF
       WINDOWS_STUB_SRC="$STUB_SRC"
       WINDOWS_STUB_OUT="$STUB_OUT"
     fi
+    WINDOWS_KONAN_DATA="$(cygpath -w "$POSIX_KONAN_DATA_DIR_PRESET")"
+    PREFETCH_SCRIPT="$STUB_DIR/prefetch.bat"
+    cat <<EOF >"$PREFETCH_SCRIPT"
+@echo on
+setlocal
+set "KONAN_DATA_DIR=${WINDOWS_KONAN_DATA}"
+"${WINDOWS_KONAN_HOME}\\bin\\konanc.bat" -target mingw_x64 -Xkonan-data-dir="${WINDOWS_KONAN_DATA}" -Xcheck-dependencies "${WINDOWS_STUB_SRC}" -o "${WINDOWS_STUB_OUT}"
+exit /b %ERRORLEVEL%
+EOF
     log "Prefetching mingw_x64 dependencies via konanc"
-    if ! cmd.exe /C "\"${WINDOWS_KONAN_HOME}\\bin\\konanc.bat\" -target mingw_x64 -Xcheck-dependencies \"${WINDOWS_STUB_SRC}\" -o \"${WINDOWS_STUB_OUT}\"" >/dev/null 2>&1; then
+    if ! cmd.exe /C "\"${PREFETCH_SCRIPT}\""; then
       log "Warning: konanc failed to prefetch dependencies. Continuing with cached artifacts, if any."
     fi
     rm -rf "$STUB_DIR"
@@ -176,11 +197,29 @@ else
   POSIX_KONAN_DATA_DIR="$KONAN_DATA_ENV"
 fi
 
-DEPENDENCIES_DIR="$POSIX_KONAN_DATA_DIR/dependencies"
-if [[ ! -d "$DEPENDENCIES_DIR" ]]; then
-  log "Expected dependencies directory missing at $DEPENDENCIES_DIR" >&2
-  log "konanc did not populate Kotlin/Native dependencies" >&2
+declare -a DEPENDENCY_DIR_CANDIDATES
+DEPENDENCY_DIR_CANDIDATES+=("$POSIX_KONAN_DATA_DIR/dependencies")
+
+DEFAULT_KONAN_DIR="$HOME/.konan/dependencies"
+if [[ -d "$DEFAULT_KONAN_DIR" ]]; then
+  DEPENDENCY_DIR_CANDIDATES+=("$DEFAULT_KONAN_DIR")
+fi
+
+DEPENDENCIES_DIR=""
+for candidate in "${DEPENDENCY_DIR_CANDIDATES[@]}"; do
+  if [[ -d "$candidate" ]]; then
+    DEPENDENCIES_DIR="$candidate"
+    break
+  fi
+done
+
+if [[ -z "$DEPENDENCIES_DIR" ]]; then
+  log "Unable to locate Kotlin/Native dependencies. Checked: ${DEPENDENCY_DIR_CANDIDATES[*]}" >&2
   exit 1
+fi
+
+if [[ "$DEPENDENCIES_DIR" != "$POSIX_KONAN_DATA_DIR/dependencies" ]]; then
+  log "Using dependencies from alternate location: $DEPENDENCIES_DIR"
 fi
 
 shopt -s nullglob
