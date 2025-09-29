@@ -108,7 +108,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     echo "Using libstdc++"
   fi
 
-  if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+  if (( use_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_C_FLAGS EXTRA_CXX_FLAGS "" cmake_toolchain_flags
   fi
 

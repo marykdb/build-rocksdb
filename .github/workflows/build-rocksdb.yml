@@ -140,34 +140,25 @@ jobs:
       - name: Install build dependencies
         run: |
           choco install -y make ninja
-      - name: Install LLVM MinGW toolchain
+      - name: Install MinGW-w64 GCC toolchain
         run: |
           set -euo pipefail
-          LLVM_MINGW_VERSION=20250910
-          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
-          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
-          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-          curl -sSL -o "$ARCHIVE_PATH" "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}"
-          TOOLCHAIN_DIR="$PWD/toolchains"
-          mkdir -p "$TOOLCHAIN_DIR"
-          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
-          import pathlib, sys, zipfile
-
-          archive = pathlib.Path(sys.argv[1])
-          dest = pathlib.Path(sys.argv[2])
-          dest.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(archive) as zf:
-              zf.extractall(dest)
-          PY
-          rm -f "$ARCHIVE_PATH"
-          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
-            echo "Expected toolchain directory $LLVM_MINGW_ROOT not found" >&2
+          choco install -y mingw --version=9.4.0
+          DEFAULT_ROOT="C:/ProgramData/mingw64/mingw64"
+          ALT_ROOT="C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64"
+          if [[ -n "${MINGW_ROOT:-}" && -d "${MINGW_ROOT}/bin" ]]; then
+            TOOLCHAIN_ROOT="$MINGW_ROOT"
+          elif [[ -d "${DEFAULT_ROOT}/bin" ]]; then
+            TOOLCHAIN_ROOT="$DEFAULT_ROOT"
+          elif [[ -d "${ALT_ROOT}/bin" ]]; then
+            TOOLCHAIN_ROOT="$ALT_ROOT"
+          else
+            echo "Failed to locate MinGW installation directory" >&2
             exit 1
           fi
-          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
-          echo "$LLVM_MINGW_ROOT/bin" >> "$GITHUB_PATH"
+          echo "Using MinGW toolchain at ${TOOLCHAIN_ROOT}"
+          echo "MINGW_ROOT=${TOOLCHAIN_ROOT}" >> "$GITHUB_ENV"
+          echo "${TOOLCHAIN_ROOT}/bin" >> "$GITHUB_PATH"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - uses: actions/upload-artifact@v4
@@ -175,53 +166,53 @@ jobs:
           name: rocksdb-mingw-x86_64
           path: build/archives/rocksdb-mingw-x86_64.zip
 
-  mingw-arm64:
-    name: Windows (MinGW) ARM64
-    runs-on: windows-2022
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - name: Install build dependencies
-        run: |
-          choco install -y make ninja
-      - name: Install LLVM MinGW toolchain
-        run: |
-          set -euo pipefail
-          LLVM_MINGW_VERSION=20250910
-          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
-          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
-          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-          curl -sSL -o "$ARCHIVE_PATH" "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}"
-          TOOLCHAIN_DIR="$PWD/toolchains"
-          mkdir -p "$TOOLCHAIN_DIR"
-          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
-          import pathlib, sys, zipfile
-
-          archive = pathlib.Path(sys.argv[1])
-          dest = pathlib.Path(sys.argv[2])
-          dest.mkdir(parents=True, exist_ok=True)
-          with zipfile.ZipFile(archive) as zf:
-              zf.extractall(dest)
-          PY
-          rm -f "$ARCHIVE_PATH"
-          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
-            echo "Expected toolchain directory $LLVM_MINGW_ROOT not found" >&2
-            exit 1
-          fi
-          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
-          echo "$LLVM_MINGW_ROOT/bin" >> "$GITHUB_PATH"
-      - name: Build Windows ARM64 MinGW package
-        run: ./build.sh mingwArm64
-      - uses: actions/upload-artifact@v4
-        with:
-          name: rocksdb-mingw-arm64
-          path: build/archives/rocksdb-mingw-arm64.zip
+#  mingw-arm64:
+#    name: Windows (MinGW) ARM64
+#    runs-on: windows-2022
+#    defaults:
+#      run:
+#        shell: bash
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          submodules: true
+#      - name: Install build dependencies
+#        run: |
+#          choco install -y make ninja
+#      - name: Install LLVM MinGW toolchain
+#        run: |
+#          set -euo pipefail
+#          LLVM_MINGW_VERSION=20250910
+#          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
+#          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
+#          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
+#          curl -sSL -o "$ARCHIVE_PATH" "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}"
+#          TOOLCHAIN_DIR="$PWD/toolchains"
+#          mkdir -p "$TOOLCHAIN_DIR"
+#          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
+#          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
+#          import pathlib, sys, zipfile
+#
+#          archive = pathlib.Path(sys.argv[1])
+#          dest = pathlib.Path(sys.argv[2])
+#          dest.mkdir(parents=True, exist_ok=True)
+#          with zipfile.ZipFile(archive) as zf:
+#              zf.extractall(dest)
+#          PY
+#          rm -f "$ARCHIVE_PATH"
+#          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
+#          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
+#            echo "Expected toolchain directory $LLVM_MINGW_ROOT not found" >&2
+#            exit 1
+#          fi
+#          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
+#          echo "$LLVM_MINGW_ROOT/bin" >> "$GITHUB_PATH"
+#      - name: Build Windows ARM64 MinGW package
+#        run: ./build.sh mingwArm64
+#      - uses: actions/upload-artifact@v4
+#        with:
+#          name: rocksdb-mingw-arm64
+#          path: build/archives/rocksdb-mingw-arm64.zip
 
   macos-x64:
     name: macOS x86_64
@@ -355,7 +346,7 @@ jobs:
       - linux-x64
       - linux-arm64
       - mingw-x64
-      - mingw-arm64
+#      - mingw-arm64
       - macos-x64
       - macos-arm64
       - ios-arm64
