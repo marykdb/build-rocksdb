@@ -255,18 +255,30 @@ elif [[ "$OUTPUT_DIR" == *macos_arm64* ]]; then
   export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
-  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
-    export CC="${TOOLCHAIN_TRIPLE}-gcc"
-    export CXX="${TOOLCHAIN_TRIPLE}-g++"
-  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+  llvm_mingw_bin=""
+  if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
+    llvm_mingw_bin="$(cd "${LLVM_MINGW_ROOT}/bin" 2>/dev/null && pwd 2>/dev/null || printf '%s' "${LLVM_MINGW_ROOT}/bin")"
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
     export CC="${TOOLCHAIN_TRIPLE}-clang"
     if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
       export CXX="${TOOLCHAIN_TRIPLE}-clang++"
     else
       export CXX="${TOOLCHAIN_TRIPLE}-clang"
     fi
+  elif [[ -n "$llvm_mingw_bin" && -x "${llvm_mingw_bin}/clang" ]]; then
+    export CC="${llvm_mingw_bin}/clang"
+    if [[ -x "${llvm_mingw_bin}/clang++" ]]; then
+      export CXX="${llvm_mingw_bin}/clang++"
+    else
+      export CXX="${llvm_mingw_bin}/clang"
+    fi
+  elif command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-gcc"
+    export CXX="${TOOLCHAIN_TRIPLE}-g++"
   else
-    echo "❌ Missing Windows x86_64 MinGW cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
+    echo "❌ Missing Windows x86_64 MinGW cross compiler." >&2
     echo "   Install an x86_64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
     exit 1
   fi
@@ -274,6 +286,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
+  disable_mingw_gcc_avx512_flags=0
   local_mingw_uses_clang=0
   if build_common::compiler_is_clang "${CC:-}"; then
     local_mingw_uses_clang=1
@@ -284,6 +297,22 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
+  else
+    disable_mingw_gcc_avx512_flags=1
+  fi
+
+  if (( disable_mingw_gcc_avx512_flags )); then
+    # GCC 9.2 bundled with Kotlin/Native crashes when processing AVX-512
+    # intrinsics from the Windows headers. Guard against the ICE by disabling
+    # every AVX-512 feature flag and undefining the associated feature macros.
+    for flag in -mno-avx512f -mno-avx512bw -mno-avx512dq -mno-avx512cd -mno-avx512vl; do
+      build_common::append_unique_flag EXTRA_CFLAGS "$flag"
+      build_common::append_unique_flag EXTRA_CXXFLAGS "$flag"
+    done
+    for flag in __AVX512F__ __AVX512BW__ __AVX512DQ__ __AVX512CD__ __AVX512VL__ __AVX512PF__ __AVX512ER__ __AVX512IFMA__ __AVX512VBMI__; do
+      build_common::append_unique_flag EXTRA_CFLAGS "-U${flag}"
+      build_common::append_unique_flag EXTRA_CXXFLAGS "-U${flag}"
+    done
   fi
 
   if (( local_mingw_uses_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
@@ -317,18 +346,30 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   fi
 elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
-  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
-    export CC="${TOOLCHAIN_TRIPLE}-gcc"
-    export CXX="${TOOLCHAIN_TRIPLE}-g++"
-  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+  llvm_mingw_bin=""
+  if [[ -n "${LLVM_MINGW_ROOT:-}" && -d "${LLVM_MINGW_ROOT}/bin" ]]; then
+    llvm_mingw_bin="$(cd "${LLVM_MINGW_ROOT}/bin" 2>/dev/null && pwd 2>/dev/null || printf '%s' "${LLVM_MINGW_ROOT}/bin")"
+  fi
+
+  if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
     export CC="${TOOLCHAIN_TRIPLE}-clang"
     if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
       export CXX="${TOOLCHAIN_TRIPLE}-clang++"
     else
       export CXX="${TOOLCHAIN_TRIPLE}-clang"
     fi
+  elif [[ -n "$llvm_mingw_bin" && -x "${llvm_mingw_bin}/clang" ]]; then
+    export CC="${llvm_mingw_bin}/clang"
+    if [[ -x "${llvm_mingw_bin}/clang++" ]]; then
+      export CXX="${llvm_mingw_bin}/clang++"
+    else
+      export CXX="${llvm_mingw_bin}/clang"
+    fi
+  elif command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-gcc"
+    export CXX="${TOOLCHAIN_TRIPLE}-g++"
   else
-    echo "❌ Missing Windows ARM64 cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
+    echo "❌ Missing Windows ARM64 cross compiler." >&2
     echo "   Install an ARM64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
     exit 1
   fi
@@ -336,6 +377,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
+  disable_mingw_gcc_avx512_flags=0
   local_mingw_uses_clang=0
   if build_common::compiler_is_clang "${CC:-}"; then
     local_mingw_uses_clang=1
@@ -346,6 +388,22 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
+  else
+    disable_mingw_gcc_avx512_flags=1
+  fi
+
+  if (( disable_mingw_gcc_avx512_flags )); then
+    # GCC 9.2 bundled with Kotlin/Native crashes when processing AVX-512
+    # intrinsics from the Windows headers. Guard against the ICE by disabling
+    # every AVX-512 feature flag and undefining the associated feature macros.
+    for flag in -mno-avx512f -mno-avx512bw -mno-avx512dq -mno-avx512cd -mno-avx512vl; do
+      build_common::append_unique_flag EXTRA_CFLAGS "$flag"
+      build_common::append_unique_flag EXTRA_CXXFLAGS "$flag"
+    done
+    for flag in __AVX512F__ __AVX512BW__ __AVX512DQ__ __AVX512CD__ __AVX512VL__ __AVX512PF__ __AVX512ER__ __AVX512IFMA__ __AVX512VBMI__; do
+      build_common::append_unique_flag EXTRA_CFLAGS "-U${flag}"
+      build_common::append_unique_flag EXTRA_CXXFLAGS "-U${flag}"
+    done
   fi
   if (( local_mingw_uses_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS

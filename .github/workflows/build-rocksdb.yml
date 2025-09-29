@@ -140,25 +140,27 @@ jobs:
       - name: Install build dependencies
         run: |
           choco install -y make ninja
-      - name: Install MinGW-w64 GCC toolchain
+      - name: Set up Java for Kotlin/Native dependencies
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Install Kotlin/Native LLVM MinGW toolchain
         run: |
           set -euo pipefail
-          choco install -y mingw --version=9.4.0
-          DEFAULT_ROOT="C:/ProgramData/mingw64/mingw64"
-          ALT_ROOT="C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64"
-          if [[ -n "${MINGW_ROOT:-}" && -d "${MINGW_ROOT}/bin" ]]; then
-            TOOLCHAIN_ROOT="$MINGW_ROOT"
-          elif [[ -d "${DEFAULT_ROOT}/bin" ]]; then
-            TOOLCHAIN_ROOT="$DEFAULT_ROOT"
-          elif [[ -d "${ALT_ROOT}/bin" ]]; then
-            TOOLCHAIN_ROOT="$ALT_ROOT"
-          else
-            echo "Failed to locate MinGW installation directory" >&2
+          LLVM_MINGW_ROOT_POSIX=$(bash "$GITHUB_WORKSPACE/scripts/setup-konan-llvm-mingw.sh" \
+            --toolchains-dir="$PWD/toolchains")
+          if [[ -z "$LLVM_MINGW_ROOT_POSIX" ]]; then
+            echo "setup-konan-llvm-mingw.sh did not return a toolchain path" >&2
             exit 1
           fi
-          echo "Using MinGW toolchain at ${TOOLCHAIN_ROOT}"
-          echo "MINGW_ROOT=${TOOLCHAIN_ROOT}" >> "$GITHUB_ENV"
-          echo "${TOOLCHAIN_ROOT}/bin" >> "$GITHUB_PATH"
+          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT_POSIX" >> "$GITHUB_ENV"
+          if command -v cygpath >/dev/null 2>&1; then
+            WINDOWS_LLVM_MINGW_ROOT=$(cygpath -w "$LLVM_MINGW_ROOT_POSIX")
+          else
+            WINDOWS_LLVM_MINGW_ROOT="$LLVM_MINGW_ROOT_POSIX"
+          fi
+          printf '%s\n' "${WINDOWS_LLVM_MINGW_ROOT}\\bin" >> "$GITHUB_PATH"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - uses: actions/upload-artifact@v4
