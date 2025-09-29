@@ -286,7 +286,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
 
-  if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+  if (( local_mingw_uses_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
@@ -347,7 +347,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
-  if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+  if (( local_mingw_uses_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
   build_common::append_unique_flag EXTRA_CMAKEFLAGS "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
