@@ -146,26 +146,21 @@ jobs:
           distribution: temurin
           java-version: "11"
       - name: Install Kotlin/Native LLVM MinGW toolchain
-        env:
-          KONAN_DATA_DIR: ${{ github.workspace }}\toolchains\konan
         run: |
           set -euo pipefail
-          TOOLCHAINS_DIR="$PWD/toolchains"
-          mkdir -p "$TOOLCHAINS_DIR"
-          rm -rf "$TOOLCHAINS_DIR/konan"
-          git clone --depth 1 --branch archive https://github.com/JetBrains/kotlin-native "$TOOLCHAINS_DIR/konan"
-          pushd "$TOOLCHAINS_DIR/konan" >/dev/null
-          ./gradlew.bat --no-daemon dependencies:mingw_x64Dependencies
-          popd >/dev/null
-          POSIX_KONAN_DIR=$(cygpath -u "$KONAN_DATA_DIR")
-          LLVM_MINGW_ROOT=$(find "$POSIX_KONAN_DIR/dependencies" -maxdepth 1 -type d -name 'msys2-mingw-w64-*clang-llvm*' | head -n 1)
-          if [[ -z "$LLVM_MINGW_ROOT" ]]; then
-            echo "Unable to locate LLVM MinGW toolchain downloaded by Kotlin/Native" >&2
+          LLVM_MINGW_ROOT_POSIX=$(bash "$GITHUB_WORKSPACE/scripts/setup-konan-llvm-mingw.sh" \
+            --toolchains-dir="$PWD/toolchains")
+          if [[ -z "$LLVM_MINGW_ROOT_POSIX" ]]; then
+            echo "setup-konan-llvm-mingw.sh did not return a toolchain path" >&2
             exit 1
           fi
-          WINDOWS_LLVM_MINGW_ROOT=$(cygpath -w "$LLVM_MINGW_ROOT")
-          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
-          echo "$WINDOWS_LLVM_MINGW_ROOT\\bin" >> "$GITHUB_PATH"
+          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT_POSIX" >> "$GITHUB_ENV"
+          if command -v cygpath >/dev/null 2>&1; then
+            WINDOWS_LLVM_MINGW_ROOT=$(cygpath -w "$LLVM_MINGW_ROOT_POSIX")
+          else
+            WINDOWS_LLVM_MINGW_ROOT="$LLVM_MINGW_ROOT_POSIX"
+          fi
+          printf '%s\n' "${WINDOWS_LLVM_MINGW_ROOT}\\bin" >> "$GITHUB_PATH"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - uses: actions/upload-artifact@v4
