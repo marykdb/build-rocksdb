@@ -23,6 +23,35 @@ build_common::append_unique_flag() {
   printf -v "$var_name" '%s' "$current"
 }
 
+build_common::compiler_is_clang() {
+  local compiler="$1"
+  if [[ -z "$compiler" ]]; then
+    return 1
+  fi
+
+  if [[ "$compiler" == *clang* ]]; then
+    return 0
+  fi
+
+  local compiler_path
+  compiler_path="$(command -v "$compiler" 2>/dev/null || true)"
+  if [[ -z "$compiler_path" ]]; then
+    return 1
+  fi
+
+  if [[ "$compiler_path" == *clang* ]]; then
+    return 0
+  fi
+
+  local version_output
+  version_output="$("$compiler_path" --version 2>/dev/null || true)"
+  if [[ "$version_output" == *clang* || "$version_output" == *LLVM* ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 build_common::is_windows_host() {
   case "$(uname -s 2>/dev/null || echo unknown)" in
     MINGW*|MSYS*|CYGWIN*) return 0 ;;
@@ -253,7 +282,7 @@ build_common::detect_llvm_mingw_root() {
     fi
   done
 
-  return 1
+  return 0
 }
 
 build_common::mingw_sysroot_has_includes() {
@@ -326,24 +355,11 @@ build_common::discover_mingw_sysroot() {
     candidates+=("${prefix}/${triple}")
   done
 
-  local -a processed_candidates=()
   local candidate
   for candidate in "${candidates[@]}"; do
     if [[ -z "$candidate" ]]; then
       continue
     fi
-    local duplicate=0
-    local recorded
-    for recorded in "${processed_candidates[@]}"; do
-      if [[ "$recorded" == "$candidate" ]]; then
-        duplicate=1
-        break
-      fi
-    done
-    if (( duplicate )); then
-      continue
-    fi
-    processed_candidates+=("$candidate")
     if build_common::mingw_sysroot_has_includes "$candidate" "$triple"; then
       return 0
     fi
@@ -370,8 +386,10 @@ build_common::apply_mingw_sysroot_flags() {
 
   local include_semicolon_list=""
   local libcxx_semicolon_list=""
-  local -a c_include_tool_paths=()
-  local -a libcxx_tool_paths=()
+  local -a c_include_tool_paths
+  c_include_tool_paths=()
+  local -a libcxx_tool_paths
+  libcxx_tool_paths=()
 
   if [[ -n "$cmake_flags_var" ]]; then
     build_common::append_unique_flag "$cmake_flags_var" "$(build_common::shell_escape "-DCMAKE_SYSROOT=${sysroot_tool_path}")"
@@ -400,7 +418,6 @@ build_common::apply_mingw_sysroot_flags() {
     fi
   fi
 
-  local -a processed_includes=()
   local candidate
   for candidate in "${include_candidates[@]}"; do
     if [[ -z "$candidate" || ! -d "$candidate" ]]; then
@@ -409,28 +426,18 @@ build_common::apply_mingw_sysroot_flags() {
     if [[ ! -f "${candidate}/stdlib.h" && ! -f "${candidate}/stdio.h" ]]; then
       continue
     fi
-    local already=0
-    local seen
-    for seen in "${processed_includes[@]}"; do
-      if [[ "$seen" == "$candidate" ]]; then
-        already=1
-        break
-      fi
-    done
-    if (( already )); then
-      continue
-    fi
-    processed_includes+=("$candidate")
     local include_tool_path
     include_tool_path="$(build_common::to_tool_path "$candidate")"
     local already_listed=0
     local listed_path
-    for listed_path in "${c_include_tool_paths[@]}"; do
-      if [[ "$listed_path" == "$include_tool_path" ]]; then
-        already_listed=1
-        break
-      fi
-    done
+    if (( ${#c_include_tool_paths[@]} )); then
+      for listed_path in "${c_include_tool_paths[@]}"; do
+        if [[ "$listed_path" == "$include_tool_path" ]]; then
+          already_listed=1
+          break
+        fi
+      done
+    fi
     if (( !already_listed )); then
       c_include_tool_paths+=("$include_tool_path")
     fi
@@ -447,7 +454,8 @@ build_common::apply_mingw_sysroot_flags() {
     fi
   done
 
-  local -a cxx_roots=()
+  local -a cxx_roots
+  cxx_roots=()
   cxx_roots+=("${sysroot}/include")
   if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
     cxx_roots+=("${sysroot_parent}/include")
@@ -465,12 +473,14 @@ build_common::apply_mingw_sysroot_flags() {
         local libcxx_tool_path
         libcxx_tool_path="$(build_common::to_tool_path "$libcxx_path")"
         local already_cxx_listed=0
-        for listed_path in "${libcxx_tool_paths[@]}"; do
-          if [[ "$listed_path" == "$libcxx_tool_path" ]]; then
-            already_cxx_listed=1
-            break
-          fi
-        done
+        if (( ${#libcxx_tool_paths[@]} )); then
+          for listed_path in "${libcxx_tool_paths[@]}"; do
+            if [[ "$listed_path" == "$libcxx_tool_path" ]]; then
+              already_cxx_listed=1
+              break
+            fi
+          done
+        fi
         if (( !already_cxx_listed )); then
           libcxx_tool_paths+=("$libcxx_tool_path")
         fi
@@ -498,12 +508,14 @@ build_common::apply_mingw_sysroot_flags() {
           local cxx_tool_path
           cxx_tool_path="$(build_common::to_tool_path "$cxx_version_dir")"
           local already_libcxx_dir=0
-          for listed_path in "${libcxx_tool_paths[@]}"; do
-            if [[ "$listed_path" == "$cxx_tool_path" ]]; then
-              already_libcxx_dir=1
-              break
-            fi
-          done
+          if (( ${#libcxx_tool_paths[@]} )); then
+            for listed_path in "${libcxx_tool_paths[@]}"; do
+              if [[ "$listed_path" == "$cxx_tool_path" ]]; then
+                already_libcxx_dir=1
+                break
+              fi
+            done
+          fi
           if (( !already_libcxx_dir )); then
             libcxx_tool_paths+=("$cxx_tool_path")
           fi
@@ -524,13 +536,18 @@ build_common::apply_mingw_sysroot_flags() {
   done
 
   local path
-  for path in "${libcxx_tool_paths[@]}"; do
-    build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
-  done
-  for path in "${c_include_tool_paths[@]}"; do
-    build_common::append_unique_flag "$cflags_var" "-isystem${path}"
-    build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
-  done
+  local path
+  if (( ${#libcxx_tool_paths[@]} )); then
+    for path in "${libcxx_tool_paths[@]}"; do
+      build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
+    done
+  fi
+  if (( ${#c_include_tool_paths[@]} )); then
+    for path in "${c_include_tool_paths[@]}"; do
+      build_common::append_unique_flag "$cflags_var" "-isystem${path}"
+      build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
+    done
+  fi
 
   local final_semicolon_list=""
   if [[ -n "$libcxx_semicolon_list" ]]; then

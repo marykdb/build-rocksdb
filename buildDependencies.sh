@@ -274,10 +274,18 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  local_mingw_uses_clang=0
+  if build_common::compiler_is_clang "${CC:-}"; then
+    local_mingw_uses_clang=1
+  elif build_common::compiler_is_clang "${CXX:-}"; then
+    local_mingw_uses_clang=1
+  fi
+  if (( local_mingw_uses_clang )); then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
+
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
   fi
@@ -328,9 +336,16 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  local_mingw_uses_clang=0
+  if build_common::compiler_is_clang "${CC:-}"; then
+    local_mingw_uses_clang=1
+  elif build_common::compiler_is_clang "${CXX:-}"; then
+    local_mingw_uses_clang=1
+  fi
+  if (( local_mingw_uses_clang )); then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
   fi
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS

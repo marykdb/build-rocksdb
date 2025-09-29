@@ -94,9 +94,18 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
 
-  if [[ "${CC}" == *"clang"* ]]; then
+  use_clang=0
+  if build_common::compiler_is_clang "${CC:-}"; then
+    use_clang=1
+  elif build_common::compiler_is_clang "${CXX:-}"; then
+    use_clang=1
+  fi
+
+  if (( use_clang )); then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
+    echo "Using libstdc++"
   fi
 
   if [[ -n "${MINGW_SYSROOT:-}" ]]; then
