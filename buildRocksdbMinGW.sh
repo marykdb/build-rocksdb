@@ -90,6 +90,9 @@ case "$ARCH" in
     ;;
 esac
 
+build_common::append_unique_flag EXTRA_C_FLAGS "-fno-emulated-tls"
+build_common::append_unique_flag EXTRA_CXX_FLAGS "-fno-emulated-tls"
+
 if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
