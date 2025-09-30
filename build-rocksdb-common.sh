@@ -407,6 +407,28 @@ build_common::apply_mingw_sysroot_flags() {
     include_candidates+=("${sysroot}/${triple}/ucrt/include")
   fi
 
+  if [[ -n "$triple" ]]; then
+    local gcc_root
+    gcc_root="${sysroot}/lib/gcc/${triple}"
+    if [[ ! -d "$gcc_root" ]]; then
+      local sysroot_parent
+      sysroot_parent="$(cd "${sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+      if [[ -n "$sysroot_parent" ]]; then
+        if [[ -d "${sysroot_parent}/lib/gcc/${triple}" ]]; then
+          gcc_root="${sysroot_parent}/lib/gcc/${triple}"
+        fi
+      fi
+    fi
+    if [[ -d "$gcc_root" ]]; then
+      local gcc_version_dir
+      gcc_version_dir="$(find "$gcc_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
+      if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
+        include_candidates+=("${gcc_version_dir}/include")
+        include_candidates+=("${gcc_version_dir}/include-fixed")
+      fi
+    fi
+  fi
+
   local sysroot_parent
   sysroot_parent="$(cd "${sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
   if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
