@@ -29,6 +29,8 @@ fi
 WINDOWS_MIN_VERSION_C_FLAGS="-U_WIN32_WINNT -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -pthread -include stdint.h"
 WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_error"
 
+MINGW_LINK_FLAGS=""
+
 declare -a cmake_toolchain_flags=()
 
 if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
@@ -108,32 +110,55 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
-    build_common::append_unique_flag EXTRA_C_FLAGS "-unwindlib=libgcc"
-    build_common::append_unique_flag EXTRA_CXX_FLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
-      for libdir in "${MINGW_SYSROOT}/lib" "${MINGW_SYSROOT}/${TOOLCHAIN_TRIPLE}/lib"; do
+      mingw_link_dirs=()
+      mingw_link_dirs+=("${MINGW_SYSROOT}/lib")
+      if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
+        mingw_link_dirs+=("${MINGW_SYSROOT}/${TOOLCHAIN_TRIPLE}/lib")
+      fi
+      sysroot_parent="$(cd "${MINGW_SYSROOT}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+      if [[ -n "$sysroot_parent" && "$sysroot_parent" != "${MINGW_SYSROOT}" ]]; then
+        mingw_link_dirs+=("${sysroot_parent}/lib")
+        if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
+          mingw_link_dirs+=("${sysroot_parent}/${TOOLCHAIN_TRIPLE}/lib")
+        fi
+      fi
+      for libdir in "${mingw_link_dirs[@]}"; do
         if [[ -d "$libdir" ]]; then
           build_common::prepend_unique_path LIBRARY_PATH "$libdir"
           libdir_tool="$(build_common::to_tool_path "$libdir")"
           if [[ -n "$libdir_tool" ]]; then
-            build_common::append_unique_flag EXTRA_C_FLAGS "-L${libdir_tool}"
-            build_common::append_unique_flag EXTRA_CXX_FLAGS "-L${libdir_tool}"
+            build_common::append_unique_flag MINGW_LINK_FLAGS "-L${libdir_tool}"
           fi
         fi
       done
-      gcc_version_root="${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}"
-      if [[ -d "$gcc_version_root" ]]; then
-        gcc_version_dir="$(find "$gcc_version_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
+      gcc_search_roots=()
+      if [[ -d "${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
+        gcc_search_roots+=("${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}")
+      fi
+      if [[ -n "$sysroot_parent" && "$sysroot_parent" != "${MINGW_SYSROOT}" ]]; then
+        if [[ -d "${sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
+          gcc_search_roots+=("${sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}")
+        fi
+      fi
+      for gcc_root in "${gcc_search_roots[@]}"; do
+        gcc_version_dir="$(find "$gcc_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
         if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
           build_common::prepend_unique_path LIBRARY_PATH "$gcc_version_dir"
           gcc_version_tool="$(build_common::to_tool_path "$gcc_version_dir")"
           if [[ -n "$gcc_version_tool" ]]; then
-            build_common::append_unique_flag EXTRA_C_FLAGS "-L${gcc_version_tool}"
-            build_common::append_unique_flag EXTRA_CXX_FLAGS "-L${gcc_version_tool}"
+            build_common::append_unique_flag MINGW_LINK_FLAGS "-L${gcc_version_tool}"
           fi
         fi
-      fi
+      done
       export LIBRARY_PATH
+    fi
+    if [[ -n "${MINGW_LINK_FLAGS}" ]]; then
+      mingw_link_flags_escaped="$(build_common::shell_escape "${MINGW_LINK_FLAGS}")"
+      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_EXE_LINKER_FLAGS=${mingw_link_flags_escaped}"
+      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_SHARED_LINKER_FLAGS=${mingw_link_flags_escaped}"
+      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_MODULE_LINKER_FLAGS=${mingw_link_flags_escaped}"
     fi
     echo "Using libstdc++"
   fi
