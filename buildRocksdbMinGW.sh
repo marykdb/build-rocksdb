@@ -110,6 +110,31 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_C_FLAGS "-unwindlib=libgcc"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-unwindlib=libgcc"
+    if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+      for libdir in "${MINGW_SYSROOT}/lib" "${MINGW_SYSROOT}/${TOOLCHAIN_TRIPLE}/lib"; do
+        if [[ -d "$libdir" ]]; then
+          build_common::prepend_unique_path LIBRARY_PATH "$libdir"
+          libdir_tool="$(build_common::to_tool_path "$libdir")"
+          if [[ -n "$libdir_tool" ]]; then
+            build_common::append_unique_flag EXTRA_C_FLAGS "-L${libdir_tool}"
+            build_common::append_unique_flag EXTRA_CXX_FLAGS "-L${libdir_tool}"
+          fi
+        fi
+      done
+      gcc_version_root="${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}"
+      if [[ -d "$gcc_version_root" ]]; then
+        gcc_version_dir="$(find "$gcc_version_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
+        if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
+          build_common::prepend_unique_path LIBRARY_PATH "$gcc_version_dir"
+          gcc_version_tool="$(build_common::to_tool_path "$gcc_version_dir")"
+          if [[ -n "$gcc_version_tool" ]]; then
+            build_common::append_unique_flag EXTRA_C_FLAGS "-L${gcc_version_tool}"
+            build_common::append_unique_flag EXTRA_CXX_FLAGS "-L${gcc_version_tool}"
+          fi
+        fi
+      fi
+      export LIBRARY_PATH
+    fi
     echo "Using libstdc++"
   fi
 

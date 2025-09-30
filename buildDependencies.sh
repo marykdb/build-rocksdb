@@ -286,6 +286,34 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_CFLAGS "-unwindlib=libgcc"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
+    if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+      for libdir in "${MINGW_SYSROOT}/lib" "${MINGW_SYSROOT}/${TOOLCHAIN_TRIPLE}/lib"; do
+        if [[ -d "$libdir" ]]; then
+          build_common::prepend_unique_path LIBRARY_PATH "$libdir"
+          libdir_tool="$(build_common::to_tool_path "$libdir")"
+          if [[ -n "$libdir_tool" ]]; then
+            build_common::append_unique_flag EXTRA_CFLAGS "-L${libdir_tool}"
+            build_common::append_unique_flag EXTRA_CXXFLAGS "-L${libdir_tool}"
+            build_common::append_unique_flag EXTRA_LDFLAGS "-L${libdir_tool}"
+          fi
+        fi
+      done
+      gcc_version_root="${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}"
+      if [[ -d "$gcc_version_root" ]]; then
+        gcc_version_dir="$(find "$gcc_version_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
+        if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
+          build_common::prepend_unique_path LIBRARY_PATH "$gcc_version_dir"
+          gcc_version_tool="$(build_common::to_tool_path "$gcc_version_dir")"
+          if [[ -n "$gcc_version_tool" ]]; then
+            build_common::append_unique_flag EXTRA_CFLAGS "-L${gcc_version_tool}"
+            build_common::append_unique_flag EXTRA_CXXFLAGS "-L${gcc_version_tool}"
+            build_common::append_unique_flag EXTRA_LDFLAGS "-L${gcc_version_tool}"
+          fi
+        fi
+      fi
+      export LIBRARY_PATH
+    fi
   fi
 
   if (( local_mingw_uses_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
@@ -350,6 +378,34 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_CFLAGS "-unwindlib=libgcc"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
+    if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+      for libdir in "${MINGW_SYSROOT}/lib" "${MINGW_SYSROOT}/${TOOLCHAIN_TRIPLE}/lib"; do
+        if [[ -d "$libdir" ]]; then
+          build_common::prepend_unique_path LIBRARY_PATH "$libdir"
+          libdir_tool="$(build_common::to_tool_path "$libdir")"
+          if [[ -n "$libdir_tool" ]]; then
+            build_common::append_unique_flag EXTRA_CFLAGS "-L${libdir_tool}"
+            build_common::append_unique_flag EXTRA_CXXFLAGS "-L${libdir_tool}"
+            build_common::append_unique_flag EXTRA_LDFLAGS "-L${libdir_tool}"
+          fi
+        fi
+      done
+      gcc_version_root="${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}"
+      if [[ -d "$gcc_version_root" ]]; then
+        gcc_version_dir="$(find "$gcc_version_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
+        if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
+          build_common::prepend_unique_path LIBRARY_PATH "$gcc_version_dir"
+          gcc_version_tool="$(build_common::to_tool_path "$gcc_version_dir")"
+          if [[ -n "$gcc_version_tool" ]]; then
+            build_common::append_unique_flag EXTRA_CFLAGS "-L${gcc_version_tool}"
+            build_common::append_unique_flag EXTRA_CXXFLAGS "-L${gcc_version_tool}"
+            build_common::append_unique_flag EXTRA_LDFLAGS "-L${gcc_version_tool}"
+          fi
+        fi
+      fi
+      export LIBRARY_PATH
+    fi
   fi
   if (( local_mingw_uses_clang )) && [[ -n "${MINGW_SYSROOT:-}" ]]; then
     build_common::apply_mingw_sysroot_flags "${TOOLCHAIN_TRIPLE}" EXTRA_CFLAGS EXTRA_CXXFLAGS EXTRA_CMAKEFLAGS
@@ -531,6 +587,11 @@ build_zlib() {
     "CROSS_PREFIX=${CROSS_PREFIX}"
   )
   local -a make_args=("CC=${CC:-cc}")
+
+  if [[ -n "${EXTRA_LDFLAGS:-}" ]]; then
+    configure_env+=("LDFLAGS=${EXTRA_LDFLAGS}")
+    make_args+=("LDFLAGS=${EXTRA_LDFLAGS}")
+  fi
 
   if [[ -n "${AR:-}" ]]; then
     configure_env+=("AR=${AR}")
