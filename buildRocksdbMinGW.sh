@@ -111,6 +111,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
+    build_common::append_unique_flag EXTRA_C_FLAGS "-Wno-#warnings"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"
     mingw_sysroots=()
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
