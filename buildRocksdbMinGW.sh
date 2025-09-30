@@ -31,9 +31,6 @@ WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_er
 
 MINGW_LINK_FLAGS=""
 
-ORIGINAL_CC_BIN=""
-ORIGINAL_CXX_BIN=""
-
 declare -a cmake_toolchain_flags=()
 
 if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
@@ -110,8 +107,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   fi
 
   if (( use_clang )); then
-    ORIGINAL_CC_BIN="$(command -v "${CC:-}" 2>/dev/null || true)"
-    ORIGINAL_CXX_BIN="$(command -v "${CXX:-}" 2>/dev/null || true)"
+    export MINGW_PREFER_LIBSTDCPP=1
     build_common::prefer_llvm_mingw_sysroot "${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
@@ -203,61 +199,6 @@ if build_common::check_existing_artifacts "$BUILD_DIR"; then
 fi
 
 mkdir -p "$BUILD_DIR"
-
-if (( use_clang )) && [[ -n "$ORIGINAL_CXX_BIN" ]]; then
-  WRAPPER_DIR="${BUILD_DIR}/toolchain-wrappers"
-  mkdir -p "$WRAPPER_DIR"
-
-  if [[ -n "$ORIGINAL_CC_BIN" ]]; then
-    cat >"${WRAPPER_DIR}/cc" <<'EOF_CC_WRAPPER'
-#!/usr/bin/env bash
-set -euo pipefail
-
-args=()
-for arg in "$@"; do
-  case "$arg" in
-    -stdlib=libc++)
-      continue
-      ;;
-  esac
-  args+=("$arg")
-done
-
-exec "__REAL_CC__" "${args[@]}"
-EOF_CC_WRAPPER
-    sed -i "s#__REAL_CC__#$(printf '%q' "$ORIGINAL_CC_BIN")#" "${WRAPPER_DIR}/cc"
-    chmod +x "${WRAPPER_DIR}/cc"
-    CC="${WRAPPER_DIR}/cc"
-  fi
-
-  cat >"${WRAPPER_DIR}/cxx" <<'EOF_CXX_WRAPPER'
-#!/usr/bin/env bash
-set -euo pipefail
-
-args=()
-has_stdlib_flag=0
-for arg in "$@"; do
-  case "$arg" in
-    -stdlib=libc++)
-      continue
-      ;;
-    -stdlib=libstdc++)
-      has_stdlib_flag=1
-      ;;
-  esac
-  args+=("$arg")
-done
-
-if (( has_stdlib_flag == 0 )); then
-  args+=("-stdlib=libstdc++")
-fi
-
-exec "__REAL_CXX__" "${args[@]}"
-EOF_CXX_WRAPPER
-  sed -i "s#__REAL_CXX__#$(printf '%q' "$ORIGINAL_CXX_BIN")#" "${WRAPPER_DIR}/cxx"
-  chmod +x "${WRAPPER_DIR}/cxx"
-  CXX="${WRAPPER_DIR}/cxx"
-fi
 
 NUM_CORES="$(build_common::default_parallel_jobs)"
 
