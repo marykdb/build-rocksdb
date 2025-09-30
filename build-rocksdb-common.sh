@@ -493,6 +493,7 @@ build_common::apply_mingw_sysroot_flags() {
   local -a include_candidates=()
   include_candidates+=("${sysroot}/include")
   include_candidates+=("${sysroot}/ucrt/include")
+  local -a gcc_include_roots=()
 
   if [[ -n "$triple" ]]; then
     include_candidates+=("${sysroot}/${triple}/include")
@@ -515,8 +516,25 @@ build_common::apply_mingw_sysroot_flags() {
       local gcc_version_dir
       gcc_version_dir="$(find "$gcc_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
       if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
-        include_candidates+=("${gcc_version_dir}/include")
-        include_candidates+=("${gcc_version_dir}/include-fixed")
+        local gcc_include_dir="${gcc_version_dir}/include"
+        local gcc_include_fixed_dir="${gcc_version_dir}/include-fixed"
+        if [[ -d "$gcc_include_dir" ]]; then
+          include_candidates+=("${gcc_include_dir}")
+          local already_have_include=0
+          local existing_include
+          for existing_include in "${gcc_include_roots[@]}"; do
+            if [[ "$existing_include" == "$gcc_include_dir" ]]; then
+              already_have_include=1
+              break
+            fi
+          done
+          if (( !already_have_include )); then
+            gcc_include_roots+=("$gcc_include_dir")
+          fi
+        fi
+        if [[ -d "$gcc_include_fixed_dir" ]]; then
+          include_candidates+=("${gcc_include_fixed_dir}")
+        fi
       fi
     fi
   fi
@@ -573,6 +591,25 @@ build_common::apply_mingw_sysroot_flags() {
   cxx_roots+=("${sysroot}/include")
   if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
     cxx_roots+=("${sysroot_parent}/include")
+  fi
+  if (( ${#gcc_include_roots[@]} )); then
+    local gcc_include_root
+    for gcc_include_root in "${gcc_include_roots[@]}"; do
+      if [[ -z "$gcc_include_root" || ! -d "$gcc_include_root" ]]; then
+        continue
+      fi
+      local already_listed_root=0
+      local existing_root
+      for existing_root in "${cxx_roots[@]}"; do
+        if [[ "$existing_root" == "$gcc_include_root" ]]; then
+          already_listed_root=1
+          break
+        fi
+      done
+      if (( !already_listed_root )); then
+        cxx_roots+=("$gcc_include_root")
+      fi
+    done
   fi
 
   local root
