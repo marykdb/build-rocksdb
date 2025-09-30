@@ -285,13 +285,14 @@ build_common::detect_llvm_mingw_root() {
   return 0
 }
 
-build_common::prefer_llvm_mingw_sysroot() {
+build_common::prefer_llvm_mingw_sysroot() { 
   local triple="$1"
 
   if [[ -z "${LLVM_MINGW_ROOT:-}" || -z "$triple" ]]; then
     return 1
   fi
 
+  local previous_sysroot="${MINGW_SYSROOT:-}"
   local -a candidates=()
   candidates+=("${LLVM_MINGW_ROOT}/${triple}")
   candidates+=("${LLVM_MINGW_ROOT}")
@@ -299,10 +300,22 @@ build_common::prefer_llvm_mingw_sysroot() {
   local candidate
   for candidate in "${candidates[@]}"; do
     if build_common::mingw_sysroot_has_includes "$candidate" "$triple"; then
+      local chosen_sysroot="${MINGW_SYSROOT:-}"
+      if [[ -n "$previous_sysroot" && "$previous_sysroot" != "$chosen_sysroot" ]]; then
+        export MINGW_FALLBACK_SYSROOT="$previous_sysroot"
+      else
+        unset MINGW_FALLBACK_SYSROOT
+      fi
       return 0
     fi
   done
 
+  if [[ -n "$previous_sysroot" ]]; then
+    export MINGW_SYSROOT="$previous_sysroot"
+  else
+    unset MINGW_SYSROOT
+  fi
+  unset MINGW_FALLBACK_SYSROOT
   return 1
 }
 
@@ -654,6 +667,7 @@ build_common::ensure_mingw_environment() {
     build_common::prepend_unique_path PATH "${LLVM_MINGW_ROOT}/bin"
   fi
 
+  unset MINGW_FALLBACK_SYSROOT
   build_common::discover_mingw_sysroot "$triple" "$compiler_path"
 
   if [[ -z "${MINGW_TRIPLE:-}" ]]; then

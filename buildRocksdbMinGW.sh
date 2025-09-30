@@ -112,46 +112,57 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"
+    mingw_sysroots=()
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
+      mingw_sysroots+=("${MINGW_SYSROOT}")
+    fi
+    if [[ -n "${MINGW_FALLBACK_SYSROOT:-}" && "${MINGW_FALLBACK_SYSROOT}" != "${MINGW_SYSROOT:-}" ]]; then
+      mingw_sysroots+=("${MINGW_FALLBACK_SYSROOT}")
+    fi
+    if (( ${#mingw_sysroots[@]} )); then
       mingw_link_dirs=()
-      mingw_link_dirs+=("${MINGW_SYSROOT}/lib")
-      if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
-        mingw_link_dirs+=("${MINGW_SYSROOT}/${TOOLCHAIN_TRIPLE}/lib")
-      fi
-      sysroot_parent="$(cd "${MINGW_SYSROOT}/.." 2>/dev/null && pwd 2>/dev/null || true)"
-      if [[ -n "$sysroot_parent" && "$sysroot_parent" != "${MINGW_SYSROOT}" ]]; then
-        mingw_link_dirs+=("${sysroot_parent}/lib")
+      for current_sysroot in "${mingw_sysroots[@]}"; do
+        [[ -n "$current_sysroot" ]] || continue
+        local_sysroot_parent="$(cd "${current_sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+        local -a candidate_libdirs=("${current_sysroot}/lib")
         if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
-          mingw_link_dirs+=("${sysroot_parent}/${TOOLCHAIN_TRIPLE}/lib")
+          candidate_libdirs+=("${current_sysroot}/${TOOLCHAIN_TRIPLE}/lib")
         fi
-      fi
-      for libdir in "${mingw_link_dirs[@]}"; do
-        if [[ -d "$libdir" ]]; then
-          build_common::prepend_unique_path LIBRARY_PATH "$libdir"
-          libdir_tool="$(build_common::to_tool_path "$libdir")"
-          if [[ -n "$libdir_tool" ]]; then
-            build_common::append_unique_flag MINGW_LINK_FLAGS "-L${libdir_tool}"
+        if [[ -n "$local_sysroot_parent" && "$local_sysroot_parent" != "$current_sysroot" ]]; then
+          candidate_libdirs+=("${local_sysroot_parent}/lib")
+          if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
+            candidate_libdirs+=("${local_sysroot_parent}/${TOOLCHAIN_TRIPLE}/lib")
           fi
         fi
-      done
-      gcc_search_roots=()
-      if [[ -d "${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
-        gcc_search_roots+=("${MINGW_SYSROOT}/lib/gcc/${TOOLCHAIN_TRIPLE}")
-      fi
-      if [[ -n "$sysroot_parent" && "$sysroot_parent" != "${MINGW_SYSROOT}" ]]; then
-        if [[ -d "${sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
-          gcc_search_roots+=("${sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}")
+        for libdir in "${candidate_libdirs[@]}"; do
+          if [[ -d "$libdir" ]]; then
+            build_common::prepend_unique_path LIBRARY_PATH "$libdir"
+            libdir_tool="$(build_common::to_tool_path "$libdir")"
+            if [[ -n "$libdir_tool" ]]; then
+              build_common::append_unique_flag MINGW_LINK_FLAGS "-L${libdir_tool}"
+            fi
+          fi
+        done
+
+        local -a gcc_search_roots=()
+        if [[ -n "${TOOLCHAIN_TRIPLE:-}" && -d "${current_sysroot}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
+          gcc_search_roots+=("${current_sysroot}/lib/gcc/${TOOLCHAIN_TRIPLE}")
         fi
-      fi
-      for gcc_root in "${gcc_search_roots[@]}"; do
-        gcc_version_dir="$(find "$gcc_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
-        if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
-          build_common::prepend_unique_path LIBRARY_PATH "$gcc_version_dir"
-          gcc_version_tool="$(build_common::to_tool_path "$gcc_version_dir")"
-          if [[ -n "$gcc_version_tool" ]]; then
-            build_common::append_unique_flag MINGW_LINK_FLAGS "-L${gcc_version_tool}"
+        if [[ -n "$local_sysroot_parent" && "$local_sysroot_parent" != "$current_sysroot" ]]; then
+          if [[ -n "${TOOLCHAIN_TRIPLE:-}" && -d "${local_sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
+            gcc_search_roots+=("${local_sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}")
           fi
         fi
+        for gcc_root in "${gcc_search_roots[@]}"; do
+          gcc_version_dir="$(find "$gcc_root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | tail -n 1)"
+          if [[ -n "$gcc_version_dir" && -d "$gcc_version_dir" ]]; then
+            build_common::prepend_unique_path LIBRARY_PATH "$gcc_version_dir"
+            gcc_version_tool="$(build_common::to_tool_path "$gcc_version_dir")"
+            if [[ -n "$gcc_version_tool" ]]; then
+              build_common::append_unique_flag MINGW_LINK_FLAGS "-L${gcc_version_tool}"
+            fi
+          fi
+        done
       done
       export LIBRARY_PATH
     fi
