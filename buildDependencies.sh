@@ -284,6 +284,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
+    export BUILD_COMMON_MINGW_STDLIB="libstdc++"
     build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_link_dirs=()
@@ -390,6 +391,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
+    export BUILD_COMMON_MINGW_STDLIB="libstdc++"
     build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_link_dirs=()

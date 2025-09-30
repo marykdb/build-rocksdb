@@ -111,6 +111,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
+    export BUILD_COMMON_MINGW_STDLIB="libstdc++"
     build_common::append_unique_flag EXTRA_C_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"

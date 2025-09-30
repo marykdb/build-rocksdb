@@ -424,6 +424,11 @@ build_common::apply_mingw_sysroot_flags() {
   c_include_tool_paths=()
   local -a libcxx_tool_paths
   libcxx_tool_paths=()
+  local preferred_stdlib="${BUILD_COMMON_MINGW_STDLIB:-}"
+  local skip_libcxx_includes=0
+  if [[ "$preferred_stdlib" == "libstdc++" ]]; then
+    skip_libcxx_includes=1
+  fi
 
   if [[ -n "$cmake_flags_var" ]]; then
     build_common::append_unique_flag "$cmake_flags_var" "$(build_common::shell_escape "-DCMAKE_SYSROOT=${sysroot_tool_path}")"
@@ -524,7 +529,7 @@ build_common::apply_mingw_sysroot_flags() {
     fi
 
     local libcxx_path="${root}/c++/v1"
-    if [[ -d "$libcxx_path" ]]; then
+    if (( !skip_libcxx_includes )) && [[ -d "$libcxx_path" ]]; then
       if [[ -f "${libcxx_path}/vector" || -f "${libcxx_path}/string" || -f "${libcxx_path}/memory" ]]; then
         local libcxx_tool_path
         libcxx_tool_path="$(build_common::to_tool_path "$libcxx_path")"
@@ -558,6 +563,9 @@ build_common::apply_mingw_sysroot_flags() {
     if [[ -d "${root}/c++" ]]; then
       while IFS= read -r cxx_version_dir; do
         if [[ -z "$cxx_version_dir" ]]; then
+          continue
+        fi
+        if (( skip_libcxx_includes )) && [[ "${cxx_version_dir##*/}" == "v1" ]]; then
           continue
         fi
         if [[ -f "${cxx_version_dir}/vector" || -f "${cxx_version_dir}/string" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
