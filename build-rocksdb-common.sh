@@ -581,61 +581,60 @@ build_common::apply_mingw_sysroot_flags() {
         local cxx_tool_path
         cxx_tool_path="$(build_common::to_tool_path "$cxx_version_dir")"
         local already_libcxx_dir=0
-          if (( ${#libcxx_tool_paths[@]} )); then
-            for listed_path in "${libcxx_tool_paths[@]}"; do
-              if [[ "$listed_path" == "$cxx_tool_path" ]]; then
-                already_libcxx_dir=1
-                break
+        if (( ${#libcxx_tool_paths[@]} )); then
+          for listed_path in "${libcxx_tool_paths[@]}"; do
+            if [[ "$listed_path" == "$cxx_tool_path" ]]; then
+              already_libcxx_dir=1
+              break
+            fi
+          done
+        fi
+        if (( !already_libcxx_dir )); then
+          libcxx_tool_paths+=("$cxx_tool_path")
+        fi
+        if [[ -n "$cxx_tool_path" ]]; then
+          case ";${libcxx_semicolon_list};" in
+            *";${cxx_tool_path};"*) ;;
+            *)
+              if [[ -n "$libcxx_semicolon_list" ]]; then
+                libcxx_semicolon_list+=";"
               fi
-            done
-          fi
-          if (( !already_libcxx_dir )); then
-            libcxx_tool_paths+=("$cxx_tool_path")
-          fi
-          if [[ -n "$cxx_tool_path" ]]; then
-            case ";${libcxx_semicolon_list};" in
-              *";${cxx_tool_path};"*) ;;
-              *)
-                if [[ -n "$libcxx_semicolon_list" ]]; then
-                  libcxx_semicolon_list+=";"
-                fi
-                libcxx_semicolon_list+="$cxx_tool_path"
-                ;;
-            esac
-          fi
+              libcxx_semicolon_list+="$cxx_tool_path"
+              ;;
+          esac
+        fi
 
-          if [[ -n "$triple" ]]; then
-            local triple_cxx_dir
-            triple_cxx_dir="${cxx_version_dir}/${triple}"
-            if [[ -d "$triple_cxx_dir" ]]; then
-              if (( prefer_libstdcpp )) && [[ "$triple_cxx_dir" == */c++/v1 ]]; then
-                continue
-              fi
-              local triple_cxx_tool
-              triple_cxx_tool="$(build_common::to_tool_path "$triple_cxx_dir")"
-              local already_triple_listed=0
-              if (( ${#libcxx_tool_paths[@]} )); then
-                for listed_path in "${libcxx_tool_paths[@]}"; do
-                  if [[ "$listed_path" == "$triple_cxx_tool" ]]; then
-                    already_triple_listed=1
-                    break
+        if [[ -n "$triple" ]]; then
+          local triple_cxx_dir
+          triple_cxx_dir="${cxx_version_dir}/${triple}"
+          if [[ -d "$triple_cxx_dir" ]]; then
+            if (( prefer_libstdcpp )) && [[ "$triple_cxx_dir" == */c++/v1 ]]; then
+              continue
+            fi
+            local triple_cxx_tool
+            triple_cxx_tool="$(build_common::to_tool_path "$triple_cxx_dir")"
+            local already_triple_listed=0
+            if (( ${#libcxx_tool_paths[@]} )); then
+              for listed_path in "${libcxx_tool_paths[@]}"; do
+                if [[ "$listed_path" == "$triple_cxx_tool" ]]; then
+                  already_triple_listed=1
+                  break
+                fi
+              done
+            fi
+            if (( !already_triple_listed )); then
+              libcxx_tool_paths+=("$triple_cxx_tool")
+            fi
+            if [[ -n "$triple_cxx_tool" ]]; then
+              case ";${libcxx_semicolon_list};" in
+                *";${triple_cxx_tool};"*) ;;
+                *)
+                  if [[ -n "$libcxx_semicolon_list" ]]; then
+                    libcxx_semicolon_list+=";"
                   fi
-                done
-              fi
-              if (( !already_triple_listed )); then
-                libcxx_tool_paths+=("$triple_cxx_tool")
-              fi
-              if [[ -n "$triple_cxx_tool" ]]; then
-                case ";${libcxx_semicolon_list};" in
-                  *";${triple_cxx_tool};"*) ;;
-                  *)
-                    if [[ -n "$libcxx_semicolon_list" ]]; then
-                      libcxx_semicolon_list+=";"
-                    fi
-                    libcxx_semicolon_list+="$triple_cxx_tool"
-                    ;;
-                esac
-              fi
+                  libcxx_semicolon_list+="$triple_cxx_tool"
+                  ;;
+              esac
             fi
           fi
         fi
@@ -643,7 +642,6 @@ build_common::apply_mingw_sysroot_flags() {
     fi
   done
 
-  local path
   local path
   if (( ${#libcxx_tool_paths[@]} )); then
     for path in "${libcxx_tool_paths[@]}"; do
