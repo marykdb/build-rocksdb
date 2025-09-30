@@ -42,8 +42,8 @@ The archives are staged under `build/archives/` during a build and can be publis
 - The `watchos-arm64` archive labelled above uses the `arm64_32` ABI (64-bit registers with 32-bit pointers) because that remains the deployment baseline for physical watches.
 
 ### Windows (MinGW) toolchain baseline
-- Continuous integration provisions [`llvm-mingw-20241030-ucrt-x86_64`](https://github.com/mstorsjo/llvm-mingw/releases/tag/20241030), the first long-lived toolchain built from LLVM 19. `./buildRocksdbMinGW.sh` and `buildDependencies.sh` automatically pick it up when `LLVM_MINGW_ROOT` points at the extracted directory.
-- Kotlin/Native still links MinGW targets with GCC 9.2's libstdc++ runtime, so the workflow also downloads the matching WinLibs sysroot to keep ABI compatibility when consuming the prebuilt archives.
+- Continuous integration now provisions an MSYS2 MinGW-w64 environment (via [`msys2/setup-msys2`](https://github.com/msys2/setup-msys2)) and installs the `mingw-w64-x86_64-toolchain`, `mingw-w64-x86_64-cmake`, and `mingw-w64-x86_64-ninja` packages. This supplies GCC/Clang frontends, the MinGW sysroot, and build utilities directly from the MSYS2 distribution.
+- RocksDB is compiled with `-O3 -DNDEBUG -fexceptions -frtti -fno-omit-frame-pointer` and the Windows portability defines (`WIN32_LEAN_AND_MEAN`, `UNICODE`, `_UNICODE`, `PORTABLE=1`). Link flags request static libstdc++/libgcc to keep the produced `.a` archives self-contained when linked from Kotlin/Native or other consumers.
 
 ## Usage examples
 - List available build configurations:

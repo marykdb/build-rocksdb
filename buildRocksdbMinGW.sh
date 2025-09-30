@@ -95,6 +95,21 @@ esac
 build_common::append_unique_flag EXTRA_C_FLAGS "-fno-emulated-tls"
 build_common::append_unique_flag EXTRA_CXX_FLAGS "-fno-emulated-tls"
 
+for optimization_flag in -O3 -DNDEBUG -fexceptions -fno-omit-frame-pointer; do
+  build_common::append_unique_flag EXTRA_C_FLAGS "$optimization_flag"
+  build_common::append_unique_flag EXTRA_CXX_FLAGS "$optimization_flag"
+done
+
+for define_flag in -DWIN32_LEAN_AND_MEAN -DUNICODE -D_UNICODE; do
+  build_common::append_unique_flag EXTRA_C_FLAGS "$define_flag"
+  build_common::append_unique_flag EXTRA_CXX_FLAGS "$define_flag"
+done
+
+build_common::append_unique_flag EXTRA_CXX_FLAGS "-frtti"
+
+build_common::append_unique_flag MINGW_LINK_FLAGS "-static-libstdc++"
+build_common::append_unique_flag MINGW_LINK_FLAGS "-static-libgcc"
+
 if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"
