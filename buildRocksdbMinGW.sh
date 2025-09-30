@@ -108,6 +108,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
+    build_common::append_unique_flag EXTRA_C_FLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-unwindlib=libgcc"
     echo "Using libstdc++"
   fi
 
