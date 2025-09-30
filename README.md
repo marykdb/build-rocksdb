@@ -41,6 +41,10 @@ The archives are staged under `build/archives/` during a build and can be publis
 - Similarly, simulator builds for iOS, watchOS, and tvOS are arm64-only—aside from the macOS x86_64 build, there are no simulator x86_64 variants because developers are expected to be on Apple Silicon hardware five years after its introduction.
 - The `watchos-arm64` archive labelled above uses the `arm64_32` ABI (64-bit registers with 32-bit pointers) because that remains the deployment baseline for physical watches.
 
+### Windows (MinGW) toolchain baseline
+- Continuous integration provisions [`llvm-mingw-20241030-ucrt-x86_64`](https://github.com/mstorsjo/llvm-mingw/releases/tag/20241030), the first long-lived toolchain built from LLVM 19. `./buildRocksdbMinGW.sh` and `buildDependencies.sh` automatically pick it up when `LLVM_MINGW_ROOT` points at the extracted directory.
+- Kotlin/Native still links MinGW targets with GCC 9.2's libstdc++ runtime, so the workflow also downloads the matching WinLibs sysroot to keep ABI compatibility when consuming the prebuilt archives.
+
 ## Usage examples
 - List available build configurations:
   ```bash
@@ -61,3 +65,8 @@ Before starting a build, ensure the RocksDB submodule is initialized:
 git submodule update --init --recursive
 ```
 This is required because the orchestrator copies headers directly from `rocksdb/include`.
+
+## Troubleshooting
+- [Windows linker diagnostics](docs/windows-linker-diagnostics.md) explains the `comdat section ... without leader and unassociated`
+  messages that `lld-link` may print when the Kotlin/Native toolchain links against the
+  prebuilt MinGW archives.

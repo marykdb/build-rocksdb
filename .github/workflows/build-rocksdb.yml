@@ -143,7 +143,7 @@ jobs:
       - name: Install LLVM MinGW toolchain
         run: |
           set -euo pipefail
-          LLVM_MINGW_VERSION=20240726
+          LLVM_MINGW_VERSION=20241030
           LLVM_MINGW_DIST="llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64"
           ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
           ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
@@ -215,7 +215,7 @@ jobs:
 #      - name: Install LLVM MinGW toolchain
 #        run: |
 #          set -euo pipefail
-#          LLVM_MINGW_VERSION=20250910
+#          LLVM_MINGW_VERSION=20241030
 #          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
 #          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
 #          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
