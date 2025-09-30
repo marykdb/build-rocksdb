@@ -622,11 +622,12 @@ build_common::apply_mingw_sysroot_flags() {
           continue
         fi
         local has_stdlib_headers=0
-        if [[ -f "${cxx_version_dir}/vector" || -f "${cxx_version_dir}/string" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
-          has_stdlib_headers=1
-        fi
         if (( prefer_libstdcpp )); then
           if [[ -f "${cxx_version_dir}/bits/c++config.h" ]]; then
+            has_stdlib_headers=1
+          fi
+        else
+          if [[ -f "${cxx_version_dir}/vector" || -f "${cxx_version_dir}/string" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
             has_stdlib_headers=1
           fi
         fi
@@ -664,6 +665,19 @@ build_common::apply_mingw_sysroot_flags() {
           triple_cxx_dir="${cxx_version_dir}/${triple}"
           if [[ -d "$triple_cxx_dir" ]]; then
             if (( prefer_libstdcpp )) && [[ "$triple_cxx_dir" == */c++/v1 ]]; then
+              continue
+            fi
+            local triple_has_stdlib_headers=0
+            if (( prefer_libstdcpp )); then
+              if [[ -f "${triple_cxx_dir}/bits/c++config.h" ]]; then
+                triple_has_stdlib_headers=1
+              fi
+            else
+              if [[ -f "${triple_cxx_dir}/vector" || -f "${triple_cxx_dir}/string" || -f "${triple_cxx_dir}/bits/stdc++.h" ]]; then
+                triple_has_stdlib_headers=1
+              fi
+            fi
+            if (( !triple_has_stdlib_headers )); then
               continue
             fi
             local triple_cxx_tool

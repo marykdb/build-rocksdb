@@ -198,6 +198,22 @@ fi
 echo "Building RocksDB for Windows (MinGW) with ARCH=${ARCH}"
 echo "Compiler: $CC / $CXX"
 
+if (( use_clang )); then
+  echo "MinGW sysroot: ${MINGW_SYSROOT:-<not-detected>}"
+  if [[ -n "${MINGW_FALLBACK_SYSROOT:-}" ]]; then
+    echo "MinGW fallback sysroot: ${MINGW_FALLBACK_SYSROOT}"
+  fi
+  echo "MINGW_PREFER_LIBSTDCPP=${MINGW_PREFER_LIBSTDCPP:-0}"
+  echo "Extra C flags: ${EXTRA_C_FLAGS:-<none>}"
+  echo "Extra CXX flags: ${EXTRA_CXX_FLAGS:-<none>}"
+  if [[ -n "${MINGW_LINK_FLAGS:-}" ]]; then
+    echo "Linker flags: ${MINGW_LINK_FLAGS}"
+  fi
+  if [[ -n "${MINGW_INCLUDE_DIRECTORIES:-}" ]]; then
+    echo "CMake include dirs: ${MINGW_INCLUDE_DIRECTORIES}"
+  fi
+fi
+
 # Ensure we run from the repository root so relative paths resolve correctly
 cd "${REPO_ROOT}" || { echo "Failed to navigate to repository root"; exit 1; }
 
