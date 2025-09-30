@@ -319,6 +319,55 @@ build_common::prefer_llvm_mingw_sysroot() {
   return 1
 }
 
+build_common::mingw_sysroot_contains_libstdcpp() {
+  local sysroot="$1"
+  local triple="$2"
+
+  if [[ -z "$sysroot" ]]; then
+    return 1
+  fi
+
+  local prefer_libstdcpp="${MINGW_PREFER_LIBSTDCPP:-0}"
+  if (( !prefer_libstdcpp )); then
+    return 0
+  fi
+
+  local -a search_roots=()
+  search_roots+=("${sysroot}/include")
+  if [[ -n "$triple" ]]; then
+    search_roots+=("${sysroot}/${triple}/include")
+  fi
+
+  local sysroot_parent
+  sysroot_parent="$(cd "${sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+  if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
+    search_roots+=("${sysroot_parent}/include")
+    if [[ -n "$triple" ]]; then
+      search_roots+=("${sysroot_parent}/${triple}/include")
+    fi
+  fi
+
+  local root
+  for root in "${search_roots[@]}"; do
+    if [[ ! -d "${root}/c++" ]]; then
+      continue
+    fi
+    while IFS= read -r candidate; do
+      if [[ -z "$candidate" ]]; then
+        continue
+      fi
+      if [[ "$candidate" == */c++/v1 ]]; then
+        continue
+      fi
+      if [[ -f "${candidate}/bits/c++config.h" ]]; then
+        return 0
+      fi
+    done < <(find "${root}/c++" -mindepth 1 -maxdepth 2 -type d 2>/dev/null)
+  done
+
+  return 1
+}
+
 build_common::mingw_sysroot_has_includes() {
   local root="$1"
   local triple="$2"
@@ -329,12 +378,18 @@ build_common::mingw_sysroot_has_includes() {
   local resolved
   resolved="$(cd "$root" 2>/dev/null && pwd 2>/dev/null || printf '%s' "$root")"
 
+  local prefer_libstdcpp="${MINGW_PREFER_LIBSTDCPP:-0}"
+
   local candidate
   for candidate in \
     "$resolved" \
     "$resolved/${triple}"; do
     if [[ -d "${candidate}/include" ]]; then
       if [[ -f "${candidate}/include/stdlib.h" || -f "${candidate}/include/stdio.h" ]]; then
+        if (( prefer_libstdcpp )) && \
+          ! build_common::mingw_sysroot_contains_libstdcpp "$candidate" "$triple"; then
+          continue
+        fi
         export MINGW_SYSROOT="$candidate"
         return 0
       fi

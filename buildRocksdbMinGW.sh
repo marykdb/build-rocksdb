@@ -108,6 +108,7 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
 
   if (( use_clang )); then
     export MINGW_PREFER_LIBSTDCPP=1
+    build_common::discover_mingw_sysroot "${TOOLCHAIN_TRIPLE}" "${CC:-}"
     build_common::prefer_llvm_mingw_sysroot "${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
