@@ -285,6 +285,45 @@ build_common::detect_llvm_mingw_root() {
   return 0
 }
 
+build_common::prefer_llvm_mingw_sysroot() {
+  local triple="$1"
+
+  if [[ -z "${LLVM_MINGW_ROOT:-}" ]]; then
+    return 1
+  fi
+
+  local current_sysroot="${MINGW_SYSROOT:-}"
+  local resolved_root
+  resolved_root="$(cd "${LLVM_MINGW_ROOT}" 2>/dev/null && pwd 2>/dev/null || printf '%s' "${LLVM_MINGW_ROOT}")"
+
+  if [[ -n "$current_sysroot" ]]; then
+    local resolved_current
+    resolved_current="$(cd "$current_sysroot" 2>/dev/null && pwd 2>/dev/null || printf '%s' "$current_sysroot")"
+    case "$resolved_current" in
+      "${resolved_root}"* )
+        return 0
+        ;;
+    esac
+  fi
+
+  local -a candidates=()
+  if [[ -n "$triple" ]]; then
+    candidates+=("${resolved_root}/${triple}")
+  fi
+  candidates+=("${resolved_root}")
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [[ -n "$candidate" && -d "$candidate" ]]; then
+      if build_common::mingw_sysroot_has_includes "$candidate" "$triple"; then
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
 build_common::mingw_sysroot_has_includes() {
   local root="$1"
   local triple="$2"

@@ -281,6 +281,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     local_mingw_uses_clang=1
   fi
   if (( local_mingw_uses_clang )); then
+    build_common::prefer_llvm_mingw_sysroot "${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
@@ -387,6 +388,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     local_mingw_uses_clang=1
   fi
   if (( local_mingw_uses_clang )); then
+    build_common::prefer_llvm_mingw_sysroot "${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
