@@ -123,15 +123,15 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
       mingw_link_dirs=()
       for current_sysroot in "${mingw_sysroots[@]}"; do
         [[ -n "$current_sysroot" ]] || continue
-        local_sysroot_parent="$(cd "${current_sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
-        local -a candidate_libdirs=("${current_sysroot}/lib")
+        current_sysroot_parent="$(cd "${current_sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+        candidate_libdirs=("${current_sysroot}/lib")
         if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
           candidate_libdirs+=("${current_sysroot}/${TOOLCHAIN_TRIPLE}/lib")
         fi
-        if [[ -n "$local_sysroot_parent" && "$local_sysroot_parent" != "$current_sysroot" ]]; then
-          candidate_libdirs+=("${local_sysroot_parent}/lib")
+        if [[ -n "$current_sysroot_parent" && "$current_sysroot_parent" != "$current_sysroot" ]]; then
+          candidate_libdirs+=("${current_sysroot_parent}/lib")
           if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
-            candidate_libdirs+=("${local_sysroot_parent}/${TOOLCHAIN_TRIPLE}/lib")
+            candidate_libdirs+=("${current_sysroot_parent}/${TOOLCHAIN_TRIPLE}/lib")
           fi
         fi
         for libdir in "${candidate_libdirs[@]}"; do
@@ -144,13 +144,13 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
           fi
         done
 
-        local -a gcc_search_roots=()
+        gcc_search_roots=()
         if [[ -n "${TOOLCHAIN_TRIPLE:-}" && -d "${current_sysroot}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
           gcc_search_roots+=("${current_sysroot}/lib/gcc/${TOOLCHAIN_TRIPLE}")
         fi
-        if [[ -n "$local_sysroot_parent" && "$local_sysroot_parent" != "$current_sysroot" ]]; then
-          if [[ -n "${TOOLCHAIN_TRIPLE:-}" && -d "${local_sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
-            gcc_search_roots+=("${local_sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}")
+        if [[ -n "$current_sysroot_parent" && "$current_sysroot_parent" != "$current_sysroot" ]]; then
+          if [[ -n "${TOOLCHAIN_TRIPLE:-}" && -d "${current_sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}" ]]; then
+            gcc_search_roots+=("${current_sysroot_parent}/lib/gcc/${TOOLCHAIN_TRIPLE}")
           fi
         fi
         for gcc_root in "${gcc_search_roots[@]}"; do
