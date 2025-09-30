@@ -285,6 +285,27 @@ build_common::detect_llvm_mingw_root() {
   return 0
 }
 
+build_common::prefer_llvm_mingw_sysroot() {
+  local triple="$1"
+
+  if [[ -z "${LLVM_MINGW_ROOT:-}" || -z "$triple" ]]; then
+    return 1
+  fi
+
+  local -a candidates=()
+  candidates+=("${LLVM_MINGW_ROOT}/${triple}")
+  candidates+=("${LLVM_MINGW_ROOT}")
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if build_common::mingw_sysroot_has_includes "$candidate" "$triple"; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 build_common::mingw_sysroot_has_includes() {
   local root="$1"
   local triple="$2"
