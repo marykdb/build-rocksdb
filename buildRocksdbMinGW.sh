@@ -113,9 +113,18 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-stdlib=libstdc++"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-nostdinc++"
     build_common::append_unique_flag EXTRA_C_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"
+    local gcc_toolchain_root
+    local gcc_toolchain_tool
+    gcc_toolchain_root="$(build_common::find_mingw_gcc_toolchain_root)"
+    if [[ -n "$gcc_toolchain_root" ]]; then
+      gcc_toolchain_tool="$(build_common::to_tool_path "$gcc_toolchain_root")"
+      build_common::append_unique_flag EXTRA_C_FLAGS "--gcc-toolchain=${gcc_toolchain_tool}"
+      build_common::append_unique_flag EXTRA_CXX_FLAGS "--gcc-toolchain=${gcc_toolchain_tool}"
+    fi
     mingw_sysroots=()
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_sysroots+=("${MINGW_SYSROOT}")

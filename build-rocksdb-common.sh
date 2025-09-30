@@ -726,6 +726,49 @@ build_common::apply_mingw_sysroot_flags() {
   fi
 }
 
+build_common::find_mingw_gcc_toolchain_root() {
+  local sysroot="${1:-${MINGW_SYSROOT:-}}"
+  local triple="${2:-${MINGW_TRIPLE:-}}"
+
+  if [[ -z "$sysroot" || -z "$triple" ]]; then
+    return 1
+  fi
+
+  local -a candidates=("$sysroot")
+
+  local sysroot_parent
+  sysroot_parent="$(cd "${sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+  if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
+    candidates+=("$sysroot_parent")
+  fi
+
+  if [[ -n "${MINGW_FALLBACK_SYSROOT:-}" ]]; then
+    candidates+=("${MINGW_FALLBACK_SYSROOT}")
+    local fallback_parent
+    fallback_parent="$(cd "${MINGW_FALLBACK_SYSROOT}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+    if [[ -n "$fallback_parent" && "$fallback_parent" != "${MINGW_FALLBACK_SYSROOT}" ]]; then
+      candidates+=("$fallback_parent")
+    fi
+  fi
+
+  if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
+    candidates+=("${LLVM_MINGW_ROOT}")
+  fi
+
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    [[ -n "$candidate" ]] || continue
+    if [[ -d "${candidate}/lib/gcc/${triple}" ]]; then
+      if [[ -x "${candidate}/bin/${triple}-g++" || -x "${candidate}/bin/${triple}-gcc" ]]; then
+        printf '%s' "$candidate"
+        return 0
+      fi
+    fi
+  done
+
+  return 1
+}
+
 build_common::ensure_mingw_environment() {
   local triple="$1"
   local compiler_bin="${2:-}"
