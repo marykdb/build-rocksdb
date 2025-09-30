@@ -30,6 +30,8 @@ WINDOWS_MIN_VERSION_C_FLAGS="-U_WIN32_WINNT -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A0
 WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_error"
 
 MINGW_LINK_FLAGS=""
+build_common::append_unique_flag MINGW_LINK_FLAGS "-static-libstdc++"
+build_common::append_unique_flag MINGW_LINK_FLAGS "-static-libgcc"
 
 declare -a cmake_toolchain_flags=()
 
@@ -168,11 +170,6 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
       done
       export LIBRARY_PATH
     fi
-    if [[ -n "${MINGW_LINK_FLAGS}" ]]; then
-      cmake_toolchain_flags+=("-DCMAKE_EXE_LINKER_FLAGS=${MINGW_LINK_FLAGS}")
-      cmake_toolchain_flags+=("-DCMAKE_SHARED_LINKER_FLAGS=${MINGW_LINK_FLAGS}")
-      cmake_toolchain_flags+=("-DCMAKE_MODULE_LINKER_FLAGS=${MINGW_LINK_FLAGS}")
-    fi
     echo "Using libstdc++"
   fi
 
@@ -182,6 +179,12 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
 
   build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_C_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
   build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
+fi
+
+if [[ -n "${MINGW_LINK_FLAGS}" ]]; then
+  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_EXE_LINKER_FLAGS=${MINGW_LINK_FLAGS}"
+  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_SHARED_LINKER_FLAGS=${MINGW_LINK_FLAGS}"
+  build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_MODULE_LINKER_FLAGS=${MINGW_LINK_FLAGS}"
 fi
 
 echo "Building RocksDB for Windows (MinGW) with ARCH=${ARCH}"
