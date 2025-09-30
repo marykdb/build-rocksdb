@@ -155,10 +155,9 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
       export LIBRARY_PATH
     fi
     if [[ -n "${MINGW_LINK_FLAGS}" ]]; then
-      mingw_link_flags_escaped="$(build_common::shell_escape "${MINGW_LINK_FLAGS}")"
-      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_EXE_LINKER_FLAGS=${mingw_link_flags_escaped}"
-      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_SHARED_LINKER_FLAGS=${mingw_link_flags_escaped}"
-      build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_MODULE_LINKER_FLAGS=${mingw_link_flags_escaped}"
+      cmake_toolchain_flags+=("-DCMAKE_EXE_LINKER_FLAGS=${MINGW_LINK_FLAGS}")
+      cmake_toolchain_flags+=("-DCMAKE_SHARED_LINKER_FLAGS=${MINGW_LINK_FLAGS}")
+      cmake_toolchain_flags+=("-DCMAKE_MODULE_LINKER_FLAGS=${MINGW_LINK_FLAGS}")
     fi
     echo "Using libstdc++"
   fi
