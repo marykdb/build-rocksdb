@@ -480,6 +480,8 @@ build_common::apply_mingw_sysroot_flags() {
   c_include_tool_paths=()
   local -a libcxx_tool_paths
   libcxx_tool_paths=()
+  local -a libcxx_filtered_paths
+  libcxx_filtered_paths=()
 
   if [[ -n "$cmake_flags_var" ]]; then
     build_common::append_unique_flag "$cmake_flags_var" "$(build_common::shell_escape "-DCMAKE_SYSROOT=${sysroot_tool_path}")"
@@ -712,31 +714,54 @@ build_common::apply_mingw_sysroot_flags() {
   done
 
   local path
+  local -a final_c_include_paths=()
+  local -a final_cxx_include_paths=()
   if (( ${#libcxx_tool_paths[@]} )); then
     for path in "${libcxx_tool_paths[@]}"; do
-      build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
+      if (( prefer_libstdcpp )); then
+        if [[ "$path" == */c++/v1 ]] || [[ "$path" == *\\c++\\v1 ]]; then
+          continue
+        fi
+      fi
+      libcxx_filtered_paths+=("$path")
     done
   fi
+
+  if (( ${#libcxx_filtered_paths[@]} )); then
+    for path in "${libcxx_filtered_paths[@]}"; do
+      build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
+      final_cxx_include_paths+=("$path")
+    done
+  fi
+
   if (( ${#c_include_tool_paths[@]} )); then
     for path in "${c_include_tool_paths[@]}"; do
       build_common::append_unique_flag "$cflags_var" "-isystem${path}"
       build_common::append_unique_flag "$cxxflags_var" "-isystem${path}"
+      final_c_include_paths+=("$path")
     done
   fi
 
-  local final_semicolon_list=""
-  if [[ -n "$libcxx_semicolon_list" ]]; then
-    final_semicolon_list="$libcxx_semicolon_list"
+  local -a semicolon_components=()
+  if (( ${#final_cxx_include_paths[@]} )); then
+    semicolon_components+=("${final_cxx_include_paths[@]}")
   fi
-  if [[ -n "$include_semicolon_list" ]]; then
-    if [[ -n "$final_semicolon_list" ]]; then
-      final_semicolon_list+=";"
-    fi
-    final_semicolon_list+="$include_semicolon_list"
+  if (( ${#final_c_include_paths[@]} )); then
+    semicolon_components+=("${final_c_include_paths[@]}")
   fi
 
-  if [[ -n "$final_semicolon_list" ]]; then
-    export MINGW_INCLUDE_DIRECTORIES="$final_semicolon_list"
+  if (( ${#semicolon_components[@]} )); then
+    local semicolon_list=""
+    for path in "${semicolon_components[@]}"; do
+      [[ -n "$path" ]] || continue
+      if [[ -n "$semicolon_list" ]]; then
+        semicolon_list+=";"
+      fi
+      semicolon_list+="$path"
+    done
+    if [[ -n "$semicolon_list" ]]; then
+      export MINGW_INCLUDE_DIRECTORIES="$semicolon_list"
+    fi
   fi
 }
 
