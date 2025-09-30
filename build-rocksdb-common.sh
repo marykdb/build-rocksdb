@@ -515,120 +515,143 @@ build_common::apply_mingw_sysroot_flags() {
     fi
   done
 
-  local -a cxx_roots
-  cxx_roots=()
-  cxx_roots+=("${sysroot}/include")
-  if [[ -n "$sysroot_parent" && "$sysroot_parent" != "$sysroot" ]]; then
-    cxx_roots+=("${sysroot_parent}/include")
+  local -a cxx_sysroots
+  cxx_sysroots=("${sysroot}")
+  local fallback_sysroot="${MINGW_FALLBACK_SYSROOT:-}"
+  if [[ -n "$fallback_sysroot" && "$fallback_sysroot" != "$sysroot" ]]; then
+    cxx_sysroots+=("${fallback_sysroot}")
   fi
 
-  local root
-  for root in "${cxx_roots[@]}"; do
-    if [[ ! -d "$root" ]]; then
+  local current_sysroot
+  for current_sysroot in "${cxx_sysroots[@]}"; do
+    if [[ -z "$current_sysroot" ]]; then
       continue
     fi
 
-    local libcxx_path="${root}/c++/v1"
-    if (( !skip_libcxx_includes )) && [[ -d "$libcxx_path" ]]; then
-      if [[ -f "${libcxx_path}/vector" || -f "${libcxx_path}/string" || -f "${libcxx_path}/memory" ]]; then
-        local libcxx_tool_path
-        libcxx_tool_path="$(build_common::to_tool_path "$libcxx_path")"
-        local already_cxx_listed=0
-        if (( ${#libcxx_tool_paths[@]} )); then
-          for listed_path in "${libcxx_tool_paths[@]}"; do
-            if [[ "$listed_path" == "$libcxx_tool_path" ]]; then
-              already_cxx_listed=1
-              break
-            fi
-          done
-        fi
-        if (( !already_cxx_listed )); then
-          libcxx_tool_paths+=("$libcxx_tool_path")
-        fi
-        if [[ -n "$libcxx_tool_path" ]]; then
-          case ";${libcxx_semicolon_list};" in
-            *";${libcxx_tool_path};"*) ;;
-            *)
-              if [[ -n "$libcxx_semicolon_list" ]]; then
-                libcxx_semicolon_list+=";"
-              fi
-              libcxx_semicolon_list+="$libcxx_tool_path"
-              ;;
-          esac
-        fi
+    local current_parent
+    current_parent="$(cd "${current_sysroot}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+
+    local -a cxx_roots
+    cxx_roots=()
+    cxx_roots+=("${current_sysroot}/include")
+    if [[ -n "$triple" ]]; then
+      cxx_roots+=("${current_sysroot}/${triple}/include")
+    fi
+    if [[ -n "$current_parent" && "$current_parent" != "$current_sysroot" ]]; then
+      cxx_roots+=("${current_parent}/include")
+      if [[ -n "$triple" ]]; then
+        cxx_roots+=("${current_parent}/${triple}/include")
       fi
     fi
 
-    local cxx_version_dir
-    if [[ -d "${root}/c++" ]]; then
-      while IFS= read -r cxx_version_dir; do
-        if [[ -z "$cxx_version_dir" ]]; then
-          continue
-        fi
-        if (( skip_libcxx_includes )) && [[ "${cxx_version_dir##*/}" == "v1" ]]; then
-          continue
-        fi
-        if [[ -f "${cxx_version_dir}/vector" || -f "${cxx_version_dir}/string" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
-          local cxx_tool_path
-          cxx_tool_path="$(build_common::to_tool_path "$cxx_version_dir")"
-          local already_libcxx_dir=0
+    local root
+    for root in "${cxx_roots[@]}"; do
+      if [[ ! -d "$root" ]]; then
+        continue
+      fi
+
+      local libcxx_path="${root}/c++/v1"
+      if (( !skip_libcxx_includes )) && [[ -d "$libcxx_path" ]]; then
+        if [[ -f "${libcxx_path}/vector" || -f "${libcxx_path}/string" || -f "${libcxx_path}/memory" ]]; then
+          local libcxx_tool_path
+          libcxx_tool_path="$(build_common::to_tool_path "$libcxx_path")"
+          local already_cxx_listed=0
           if (( ${#libcxx_tool_paths[@]} )); then
             for listed_path in "${libcxx_tool_paths[@]}"; do
-              if [[ "$listed_path" == "$cxx_tool_path" ]]; then
-                already_libcxx_dir=1
+              if [[ "$listed_path" == "$libcxx_tool_path" ]]; then
+                already_cxx_listed=1
                 break
               fi
             done
           fi
-          if (( !already_libcxx_dir )); then
-            libcxx_tool_paths+=("$cxx_tool_path")
+          if (( !already_cxx_listed )); then
+            libcxx_tool_paths+=("$libcxx_tool_path")
           fi
-          if [[ -n "$cxx_tool_path" ]]; then
+          if [[ -n "$libcxx_tool_path" ]]; then
             case ";${libcxx_semicolon_list};" in
-              *";${cxx_tool_path};"*) ;;
+              *";${libcxx_tool_path};"*) ;;
               *)
                 if [[ -n "$libcxx_semicolon_list" ]]; then
                   libcxx_semicolon_list+=";"
                 fi
-                libcxx_semicolon_list+="$cxx_tool_path"
+                libcxx_semicolon_list+="$libcxx_tool_path"
                 ;;
             esac
           fi
+        fi
+      fi
 
-          if [[ -n "$triple" ]]; then
-            local triple_cxx_dir
-            triple_cxx_dir="${cxx_version_dir}/${triple}"
-            if [[ -d "$triple_cxx_dir" ]]; then
-              local triple_cxx_tool
-              triple_cxx_tool="$(build_common::to_tool_path "$triple_cxx_dir")"
-              local already_triple_listed=0
-              if (( ${#libcxx_tool_paths[@]} )); then
-                for listed_path in "${libcxx_tool_paths[@]}"; do
-                  if [[ "$listed_path" == "$triple_cxx_tool" ]]; then
-                    already_triple_listed=1
-                    break
+      local cxx_version_dir
+      if [[ -d "${root}/c++" ]]; then
+        while IFS= read -r cxx_version_dir; do
+          if [[ -z "$cxx_version_dir" ]]; then
+            continue
+          fi
+          if (( skip_libcxx_includes )) && [[ "${cxx_version_dir##*/}" == "v1" ]]; then
+            continue
+          fi
+          if [[ -f "${cxx_version_dir}/vector" || -f "${cxx_version_dir}/string" || -f "${cxx_version_dir}/bits/stdc++.h" ]]; then
+            local cxx_tool_path
+            cxx_tool_path="$(build_common::to_tool_path "$cxx_version_dir")"
+            local already_libcxx_dir=0
+            if (( ${#libcxx_tool_paths[@]} )); then
+              for listed_path in "${libcxx_tool_paths[@]}"; do
+                if [[ "$listed_path" == "$cxx_tool_path" ]]; then
+                  already_libcxx_dir=1
+                  break
+                fi
+              done
+            fi
+            if (( !already_libcxx_dir )); then
+              libcxx_tool_paths+=("$cxx_tool_path")
+            fi
+            if [[ -n "$cxx_tool_path" ]]; then
+              case ";${libcxx_semicolon_list};" in
+                *";${cxx_tool_path};"*) ;;
+                *)
+                  if [[ -n "$libcxx_semicolon_list" ]]; then
+                    libcxx_semicolon_list+=";"
                   fi
-                done
-              fi
-              if (( !already_triple_listed )); then
-                libcxx_tool_paths+=("$triple_cxx_tool")
-              fi
-              if [[ -n "$triple_cxx_tool" ]]; then
-                case ";${libcxx_semicolon_list};" in
-                  *";${triple_cxx_tool};"*) ;;
-                  *)
-                    if [[ -n "$libcxx_semicolon_list" ]]; then
-                      libcxx_semicolon_list+=";"
+                  libcxx_semicolon_list+="$cxx_tool_path"
+                  ;;
+              esac
+            fi
+
+            if [[ -n "$triple" ]]; then
+              local triple_cxx_dir
+              triple_cxx_dir="${cxx_version_dir}/${triple}"
+              if [[ -d "$triple_cxx_dir" ]]; then
+                local triple_cxx_tool
+                triple_cxx_tool="$(build_common::to_tool_path "$triple_cxx_dir")"
+                local already_triple_listed=0
+                if (( ${#libcxx_tool_paths[@]} )); then
+                  for listed_path in "${libcxx_tool_paths[@]}"; do
+                    if [[ "$listed_path" == "$triple_cxx_tool" ]]; then
+                      already_triple_listed=1
+                      break
                     fi
-                    libcxx_semicolon_list+="$triple_cxx_tool"
-                    ;;
-                esac
+                  done
+                fi
+                if (( !already_triple_listed )); then
+                  libcxx_tool_paths+=("$triple_cxx_tool")
+                fi
+                if [[ -n "$triple_cxx_tool" ]]; then
+                  case ";${libcxx_semicolon_list};" in
+                    *";${triple_cxx_tool};"*) ;;
+                    *)
+                      if [[ -n "$libcxx_semicolon_list" ]]; then
+                        libcxx_semicolon_list+=";"
+                      fi
+                      libcxx_semicolon_list+="$triple_cxx_tool"
+                      ;;
+                  esac
+                fi
               fi
             fi
           fi
-        fi
-      done < <(find "${root}/c++" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
-    fi
+        done < <(find "${root}/c++" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+      fi
+    done
   done
 
   local path
