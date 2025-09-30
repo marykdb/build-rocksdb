@@ -530,6 +530,38 @@ build_common::apply_mingw_sysroot_flags() {
                 ;;
             esac
           fi
+
+          if [[ -n "$triple" ]]; then
+            local triple_cxx_dir
+            triple_cxx_dir="${cxx_version_dir}/${triple}"
+            if [[ -d "$triple_cxx_dir" ]]; then
+              local triple_cxx_tool
+              triple_cxx_tool="$(build_common::to_tool_path "$triple_cxx_dir")"
+              local already_triple_listed=0
+              if (( ${#libcxx_tool_paths[@]} )); then
+                for listed_path in "${libcxx_tool_paths[@]}"; do
+                  if [[ "$listed_path" == "$triple_cxx_tool" ]]; then
+                    already_triple_listed=1
+                    break
+                  fi
+                done
+              fi
+              if (( !already_triple_listed )); then
+                libcxx_tool_paths+=("$triple_cxx_tool")
+              fi
+              if [[ -n "$triple_cxx_tool" ]]; then
+                case ";${libcxx_semicolon_list};" in
+                  *";${triple_cxx_tool};"*) ;;
+                  *)
+                    if [[ -n "$libcxx_semicolon_list" ]]; then
+                      libcxx_semicolon_list+=";"
+                    fi
+                    libcxx_semicolon_list+="$triple_cxx_tool"
+                    ;;
+                esac
+              fi
+            fi
+          fi
         fi
       done < <(find "${root}/c++" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
     fi

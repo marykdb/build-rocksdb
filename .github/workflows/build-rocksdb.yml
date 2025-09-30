@@ -183,6 +183,13 @@ jobs:
             exit 1
           fi
           SYSROOT="$(cd "$SYSROOT" && pwd)"
+          SYSROOT_PARENT="$(cd "${SYSROOT}/.." 2>/dev/null && pwd 2>/dev/null || true)"
+          if [[ -n "$SYSROOT_PARENT" && "$SYSROOT_PARENT" != "$SYSROOT" ]]; then
+            if [[ -f "${SYSROOT_PARENT}/lib/libgcc_s.a" ]]; then
+              mkdir -p "${SYSROOT}/lib"
+              cp -f "${SYSROOT_PARENT}/lib/libgcc_s.a" "${SYSROOT}/lib/libgcc_s.a"
+            fi
+          fi
           echo "MINGW_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV"
           echo "MINGW_GCC92_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
       - name: Build Windows MinGW package
