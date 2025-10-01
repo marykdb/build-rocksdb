@@ -40,8 +40,17 @@ fi
 case "$ARCH" in
   x86_64)
     TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
-    CC="${TOOLCHAIN_TRIPLE}-gcc"
-    CXX="${TOOLCHAIN_TRIPLE}-g++"
+    if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+      CC="${TOOLCHAIN_TRIPLE}-clang"
+      if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+        CXX="${TOOLCHAIN_TRIPLE}-clang++"
+      else
+        CXX="${TOOLCHAIN_TRIPLE}-clang"
+      fi
+    else
+      CC="${TOOLCHAIN_TRIPLE}-gcc"
+      CXX="${TOOLCHAIN_TRIPLE}-g++"
+    fi
     cmake_toolchain_flags=(
       "-DCMAKE_SYSTEM_NAME=Windows"
       "-DCMAKE_SYSTEM_PROCESSOR=x86_64"
@@ -52,8 +61,17 @@ case "$ARCH" in
     ;;
   i686)
     TOOLCHAIN_TRIPLE="i686-w64-mingw32"
-    CC="${TOOLCHAIN_TRIPLE}-gcc"
-    CXX="${TOOLCHAIN_TRIPLE}-g++"
+    if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+      CC="${TOOLCHAIN_TRIPLE}-clang"
+      if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+        CXX="${TOOLCHAIN_TRIPLE}-clang++"
+      else
+        CXX="${TOOLCHAIN_TRIPLE}-clang"
+      fi
+    else
+      CC="${TOOLCHAIN_TRIPLE}-gcc"
+      CXX="${TOOLCHAIN_TRIPLE}-g++"
+    fi
     cmake_toolchain_flags=(
       "-DCMAKE_SYSTEM_NAME=Windows"
       "-DCMAKE_SYSTEM_PROCESSOR=i686"

@@ -255,16 +255,16 @@ elif [[ "$OUTPUT_DIR" == *macos_arm64* ]]; then
   export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
 elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
-  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
-    export CC="${TOOLCHAIN_TRIPLE}-gcc"
-    export CXX="${TOOLCHAIN_TRIPLE}-g++"
-  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+  if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
     export CC="${TOOLCHAIN_TRIPLE}-clang"
     if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
       export CXX="${TOOLCHAIN_TRIPLE}-clang++"
     else
       export CXX="${TOOLCHAIN_TRIPLE}-clang"
     fi
+  elif command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-gcc"
+    export CXX="${TOOLCHAIN_TRIPLE}-g++"
   else
     echo "❌ Missing Windows x86_64 MinGW cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
     echo "   Install an x86_64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
@@ -361,16 +361,16 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   fi
 elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   TOOLCHAIN_TRIPLE="aarch64-w64-mingw32"
-  if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
-    export CC="${TOOLCHAIN_TRIPLE}-gcc"
-    export CXX="${TOOLCHAIN_TRIPLE}-g++"
-  elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+  if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
     export CC="${TOOLCHAIN_TRIPLE}-clang"
     if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
       export CXX="${TOOLCHAIN_TRIPLE}-clang++"
     else
       export CXX="${TOOLCHAIN_TRIPLE}-clang"
     fi
+  elif command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+    export CC="${TOOLCHAIN_TRIPLE}-gcc"
+    export CXX="${TOOLCHAIN_TRIPLE}-g++"
   else
     echo "❌ Missing Windows ARM64 cross compiler (${TOOLCHAIN_TRIPLE}-gcc or ${TOOLCHAIN_TRIPLE}-clang)." >&2
     echo "   Install an ARM64 MinGW toolchain or expose it via LLVM_MINGW_ROOT." >&2
