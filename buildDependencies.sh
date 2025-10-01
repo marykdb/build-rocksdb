@@ -552,6 +552,31 @@ is_windows() {
   esac
 }
 
+is_mingw_build() {
+  local host_uname="${uname:-}"
+  if [[ -z "${host_uname}" ]]; then
+    host_uname="$(uname -s 2>/dev/null || echo '')"
+  fi
+
+  if [[ "${MINGW_TRIPLE:-}" == *-w64-mingw32* ]]; then
+    return 0
+  fi
+  if [[ "${TOOLCHAIN_TRIPLE:-}" == *-w64-mingw32* ]]; then
+    return 0
+  fi
+  if [[ "${CROSS_PREFIX:-}" == *-w64-mingw32* ]]; then
+    return 0
+  fi
+  if [[ "${CC:-}" == *w64-mingw32* ]]; then
+    return 0
+  fi
+  if [[ "$host_uname" == MINGW* || "$host_uname" == MSYS* || "$host_uname" == CYGWIN* || "$host_uname" == mingw32 ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 # ---------------------------------------------------------
 # Function to Download and Verify Tarball
 # ---------------------------------------------------------
@@ -656,21 +681,8 @@ build_zlib() {
 build_bzip2() {
   local tarball="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}"
-  local host_uname="${uname:-}"
-  if [[ -z "${host_uname}" ]]; then
-    host_uname="$(uname -s 2>/dev/null || echo '')"
-  fi
-
   local is_mingw=0
-  if [[ "${MINGW_TRIPLE:-}" == *-w64-mingw32* ]]; then
-    is_mingw=1
-  elif [[ "${TOOLCHAIN_TRIPLE:-}" == *-w64-mingw32* ]]; then
-    is_mingw=1
-  elif [[ "${CROSS_PREFIX:-}" == *-w64-mingw32* ]]; then
-    is_mingw=1
-  elif [[ "${CC:-}" == *w64-mingw32* ]]; then
-    is_mingw=1
-  elif [[ "$host_uname" == MINGW* || "$host_uname" == MSYS* || "$host_uname" == CYGWIN* || "$host_uname" == mingw32 ]]; then
+  if is_mingw_build; then
     is_mingw=1
   fi
 
@@ -755,11 +767,17 @@ build_zstd() {
     tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   fi
   pushd "${src_dir}/lib" > /dev/null
+  local zstd_cflags="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
+  if is_mingw_build; then
+    zstd_cflags+=" -fno-tree-vectorize"
+  fi
+  local zstd_cppflags="${EXTRA_CFLAGS} -DDEBUGLEVEL=0"
+
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
     HAVE_PTHREAD=0 ZSTD_LEGACY_SUPPORT=0 \
-    CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" \
-    CPPFLAGS="${EXTRA_CFLAGS} -DDEBUGLEVEL=0" \
+    CFLAGS="${zstd_cflags}" \
+    CPPFLAGS="${zstd_cppflags}" \
     libzstd.a > /dev/null
   popd > /dev/null
   cp "${src_dir}/lib/zstd.h" "${src_dir}/lib/zdict.h" "${src_dir}/lib/zstd_errors.h" "${DEPENDENCY_INCLUDE_DIR}/"
