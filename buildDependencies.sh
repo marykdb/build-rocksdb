@@ -656,11 +656,13 @@ build_zlib() {
 build_bzip2() {
   local tarball="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}"
+  local cflags="${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64 -O2 -fno-tree-vectorize"
+  [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
+    CFLAGS="${cflags}" libbz2.a > /dev/null
   cp "bzlib.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libbz2.a" "${OUTPUT_DIR}/"
   strip_archive "${OUTPUT_DIR}/libbz2.a"
