@@ -161,37 +161,35 @@ jobs:
       - name: Provision GCC 9.x libstdc++ runtime
         run: |
           set -euo pipefail
-          GCC9_VERSION=9.5.0
-          WINLIBS_RELEASE="9.5.0-10.0.0-msvcrt-r1"
-          ARCHIVE_NAME="winlibs-x86_64-posix-seh-gcc-${GCC9_VERSION}-mingw-w64msvcrt-10.0.0-r1.zip"
+          GCC9_VERSION=9.2.0
+          ARCHIVE_NAME="msys2-mingw-w64-x86_64-2.zip"
+          ARCHIVE_URL="https://download.jetbrains.com/kotlin/native/${ARCHIVE_NAME}"
           ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
           curl --fail --location --silent --show-error \
-            "https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_RELEASE}/${ARCHIVE_NAME}" \
+            "${ARCHIVE_URL}" \
             --output "$ARCHIVE_PATH"
           GCC9_ROOT="$PWD/toolchains/gcc-${GCC9_VERSION}"
           rm -rf "$GCC9_ROOT"
           mkdir -p "$GCC9_ROOT"
           7z x "$ARCHIVE_PATH" -o"$GCC9_ROOT" >/dev/null
           rm -f "$ARCHIVE_PATH"
-          if [[ -d "$GCC9_ROOT/mingw64" ]]; then
-            SYSROOT="$GCC9_ROOT/mingw64"
-          else
-            SYSROOT="$(find "$GCC9_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1)"
-          fi
-          if [[ -z "$SYSROOT" ]]; then
-            echo "Failed to locate mingw64 sysroot from GCC 9.x toolchain" >&2
+          SYSROOT_BASE="$GCC9_ROOT/msys2-mingw-w64-x86_64-2"
+          if [[ ! -d "$SYSROOT_BASE" ]]; then
+            echo "Failed to locate msys2 GCC ${GCC9_VERSION} sysroot" >&2
             exit 1
           fi
-          SYSROOT="$(cd "$SYSROOT" && pwd)"
-          SYSROOT_PARENT="$(cd "${SYSROOT}/.." 2>/dev/null && pwd 2>/dev/null || true)"
-          if [[ -n "$SYSROOT_PARENT" && "$SYSROOT_PARENT" != "$SYSROOT" ]]; then
-            if [[ -f "${SYSROOT_PARENT}/lib/libgcc_s.a" ]]; then
-              mkdir -p "${SYSROOT}/lib"
-              cp -f "${SYSROOT_PARENT}/lib/libgcc_s.a" "${SYSROOT}/lib/libgcc_s.a"
-            fi
+          if [[ -d "$SYSROOT_BASE/x86_64-w64-mingw32" ]]; then
+            SYSROOT="$SYSROOT_BASE/x86_64-w64-mingw32"
+          else
+            SYSROOT="$SYSROOT_BASE"
           fi
+          SYSROOT="$(cd "$SYSROOT" && pwd)"
+          SYSROOT_BASE="$(cd "$SYSROOT_BASE" && pwd)"
           echo "MINGW_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV"
           echo "MINGW_GCC92_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
+          if [[ "$SYSROOT" != "$SYSROOT_BASE" ]]; then
+            echo "MINGW_FALLBACK_SYSROOT=${SYSROOT_BASE//\\/\\\\}" >> "$GITHUB_ENV"
+          fi
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - uses: actions/upload-artifact@v4
