@@ -140,25 +140,47 @@ jobs:
       - name: Install build dependencies
         run: |
           choco install -y ninja 7zip
-      - name: Install LLVM MinGW toolchain
+      - name: Provision GCC 9.2 MinGW toolchain
         run: |
           set -euo pipefail
-          LLVM_MINGW_VERSION=20241030
-          LLVM_MINGW_DIST="llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64"
-          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
+          GCC9_VERSION=9.2.0
+          ARCHIVE_NAME="msys2-mingw-w64-x86_64-2.zip"
+          ARCHIVE_URL="https://download.jetbrains.com/kotlin/native/${ARCHIVE_NAME}"
           ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
           curl --fail --location --silent --show-error \
-            "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}" \
+            "${ARCHIVE_URL}" \
             --output "$ARCHIVE_PATH"
           TOOLCHAIN_DIR="$PWD/toolchains"
-          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          mkdir -p "$TOOLCHAIN_DIR"
-          7z x "$ARCHIVE_PATH" -o"$TOOLCHAIN_DIR" >/dev/null
+          GCC9_ROOT="$TOOLCHAIN_DIR/gcc-${GCC9_VERSION}"
+          rm -rf "$GCC9_ROOT"
+          mkdir -p "$GCC9_ROOT"
+          7z x "$ARCHIVE_PATH" -o"$GCC9_ROOT" >/dev/null
           rm -f "$ARCHIVE_PATH"
-          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          echo "LLVM_MINGW_ROOT=${LLVM_MINGW_ROOT//\\/\\\\}" >> "$GITHUB_ENV"
-          echo "${LLVM_MINGW_ROOT//\\/\\\\}/bin" >> "$GITHUB_PATH"
-      - name: Provision GCC 9.x libstdc++ runtime
+          TOOLCHAIN_BASE="$GCC9_ROOT/msys2-mingw-w64-x86_64-2"
+          if [[ ! -d "$TOOLCHAIN_BASE" ]]; then
+            echo "Failed to locate msys2 GCC ${GCC9_VERSION} toolchain" >&2
+            exit 1
+          fi
+          BIN_DIR="$TOOLCHAIN_BASE/bin"
+          if [[ ! -d "$BIN_DIR" ]]; then
+            echo "Failed to locate GCC ${GCC9_VERSION} bin directory" >&2
+            exit 1
+          fi
+          echo "${BIN_DIR//\\/\\\\}" >> "$GITHUB_PATH"
+          echo "MINGW_GCC_ROOT=${TOOLCHAIN_BASE//\\/\\\\}" >> "$GITHUB_ENV"
+          if [[ -d "$TOOLCHAIN_BASE/x86_64-w64-mingw32" ]]; then
+            SYSROOT="$TOOLCHAIN_BASE/x86_64-w64-mingw32"
+          else
+            SYSROOT="$TOOLCHAIN_BASE"
+          fi
+          SYSROOT="$(cd "$SYSROOT" && pwd)"
+          SYSROOT_BASE="$(cd "$TOOLCHAIN_BASE" && pwd)"
+          echo "MINGW_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV"
+          echo "MINGW_GCC92_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
+          if [[ "$SYSROOT" != "$SYSROOT_BASE" ]]; then
+            echo "MINGW_FALLBACK_SYSROOT=${SYSROOT_BASE//\\/\\\\}" >> "$GITHUB_ENV"
+          fi
+      - name: Provision alternate GCC for bzip2
         run: |
           set -euo pipefail
           GCC9_VERSION=9.5.0
@@ -168,32 +190,62 @@ jobs:
           curl --fail --location --silent --show-error \
             "https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_RELEASE}/${ARCHIVE_NAME}" \
             --output "$ARCHIVE_PATH"
-          GCC9_ROOT="$PWD/toolchains/gcc-${GCC9_VERSION}"
-          rm -rf "$GCC9_ROOT"
-          mkdir -p "$GCC9_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$GCC9_ROOT" >/dev/null
+          TOOLCHAIN_DIR="$PWD/toolchains"
+          ALT_ROOT="$TOOLCHAIN_DIR/winlibs-gcc-${GCC9_VERSION}"
+          rm -rf "$ALT_ROOT"
+          mkdir -p "$ALT_ROOT"
+          7z x "$ARCHIVE_PATH" -o"$ALT_ROOT" >/dev/null
           rm -f "$ARCHIVE_PATH"
-          if [[ -d "$GCC9_ROOT/mingw64" ]]; then
-            SYSROOT="$GCC9_ROOT/mingw64"
+          if [[ -d "$ALT_ROOT/mingw64" ]]; then
+            ALT_SYSROOT="$ALT_ROOT/mingw64"
           else
-            SYSROOT="$(find "$GCC9_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1)"
+            ALT_SYSROOT="$(find "$ALT_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1)"
           fi
-          if [[ -z "$SYSROOT" ]]; then
-            echo "Failed to locate mingw64 sysroot from GCC 9.x toolchain" >&2
+          if [[ -z "$ALT_SYSROOT" ]]; then
+            echo "Failed to locate mingw64 sysroot from alternate GCC toolchain" >&2
             exit 1
           fi
-          SYSROOT="$(cd "$SYSROOT" && pwd)"
-          SYSROOT_PARENT="$(cd "${SYSROOT}/.." 2>/dev/null && pwd 2>/dev/null || true)"
-          if [[ -n "$SYSROOT_PARENT" && "$SYSROOT_PARENT" != "$SYSROOT" ]]; then
-            if [[ -f "${SYSROOT_PARENT}/lib/libgcc_s.a" ]]; then
-              mkdir -p "${SYSROOT}/lib"
-              cp -f "${SYSROOT_PARENT}/lib/libgcc_s.a" "${SYSROOT}/lib/libgcc_s.a"
-            fi
+          ALT_SYSROOT="$(cd "$ALT_SYSROOT" && pwd)"
+          ALT_BIN_DIR="$ALT_SYSROOT/bin"
+          if [[ ! -d "$ALT_BIN_DIR" ]]; then
+            echo "Failed to locate alternate GCC bin directory" >&2
+            exit 1
           fi
-          echo "MINGW_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV"
-          echo "MINGW_GCC92_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
+          if command -v cygpath >/dev/null 2>&1; then
+            ALT_SYSROOT_UNIX="$(cygpath -u "$ALT_SYSROOT")"
+            ALT_BIN_UNIX="$(cygpath -u "$ALT_BIN_DIR")"
+          else
+            ALT_SYSROOT_UNIX="$ALT_SYSROOT"
+            ALT_BIN_UNIX="$ALT_BIN_DIR"
+          fi
+          echo "BZIP2_GCC_SYSROOT=${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
+          echo "BZIP2_GCC_BIN_DIR=${ALT_BIN_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
+      - name: Verify libstdc++ usage in MinGW build
+        run: |
+          set -euo pipefail
+          LIB_PATH="build/lib/mingw_x86_64/rocksdb-build/librocksdb.a"
+          if [[ ! -f "$LIB_PATH" ]]; then
+            LIB_PATH="build/lib/mingw_x86_64/librocksdb.a"
+          fi
+          if [[ ! -f "$LIB_PATH" ]]; then
+            echo "Failed to locate built librocksdb.a in expected directories" >&2
+            exit 1
+          fi
+          NM_BIN="x86_64-w64-mingw32-nm"
+          if ! command -v "$NM_BIN" >/dev/null 2>&1; then
+            if command -v llvm-nm >/dev/null 2>&1; then
+              NM_BIN="llvm-nm"
+            else
+              echo "Error: Unable to locate an nm tool for inspection" >&2
+              exit 1
+            fi
+          fi
+          if "$NM_BIN" -C "$LIB_PATH" | grep -q "std::__1::"; then
+            echo "Error: Detected libc++ symbols (std::__1) in librocksdb.a. Expected libstdc++." >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-mingw-x86_64

@@ -656,11 +656,84 @@ build_zlib() {
 build_bzip2() {
   local tarball="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}"
+  local host_uname="${uname:-}"
+  if [[ -z "${host_uname}" ]]; then
+    host_uname="$(uname -s 2>/dev/null || echo '')"
+  fi
+
+  local is_mingw=0
+  if [[ "${MINGW_TRIPLE:-}" == *-w64-mingw32* ]]; then
+    is_mingw=1
+  elif [[ "${TOOLCHAIN_TRIPLE:-}" == *-w64-mingw32* ]]; then
+    is_mingw=1
+  elif [[ "${CROSS_PREFIX:-}" == *-w64-mingw32* ]]; then
+    is_mingw=1
+  elif [[ "${CC:-}" == *w64-mingw32* ]]; then
+    is_mingw=1
+  elif [[ "$host_uname" == MINGW* || "$host_uname" == MSYS* || "$host_uname" == CYGWIN* || "$host_uname" == mingw32 ]]; then
+    is_mingw=1
+  fi
+
+  local cflags="${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64"
+  if (( is_mingw )); then
+    cflags+=" -O2 -fno-tree-vectorize"
+  fi
+  [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
+
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
+
+  local make_cc="${CC:-cc}"
+  local make_ar="${AR:-ar}"
+  local make_ranlib="${RANLIB:-ranlib}"
+
+  if (( is_mingw )) && [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
+    local alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
+    local triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-x86_64-w64-mingw32}}"
+
+    local -a cc_candidates=(
+      "${alt_bin_dir}/${triple}-gcc"
+      "${alt_bin_dir}/${triple}-gcc.exe"
+      "${alt_bin_dir}/gcc"
+      "${alt_bin_dir}/gcc.exe"
+    )
+    local -a ar_candidates=(
+      "${alt_bin_dir}/${triple}-ar"
+      "${alt_bin_dir}/${triple}-ar.exe"
+      "${alt_bin_dir}/ar"
+      "${alt_bin_dir}/ar.exe"
+    )
+    local -a ranlib_candidates=(
+      "${alt_bin_dir}/${triple}-ranlib"
+      "${alt_bin_dir}/${triple}-ranlib.exe"
+      "${alt_bin_dir}/ranlib"
+      "${alt_bin_dir}/ranlib.exe"
+    )
+
+    local candidate
+    for candidate in "${cc_candidates[@]}"; do
+      if [[ -x "$candidate" ]]; then
+        make_cc="$(build_common::to_tool_path "$candidate")"
+        break
+      fi
+    done
+    for candidate in "${ar_candidates[@]}"; do
+      if [[ -x "$candidate" ]]; then
+        make_ar="$(build_common::to_tool_path "$candidate")"
+        break
+      fi
+    done
+    for candidate in "${ranlib_candidates[@]}"; do
+      if [[ -x "$candidate" ]]; then
+        make_ranlib="$(build_common::to_tool_path "$candidate")"
+        break
+      fi
+    done
+  fi
+
   pushd "${src_dir}" > /dev/null
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64" libbz2.a > /dev/null
+  make CC="${make_cc}" AR="${make_ar}" RANLIB="${make_ranlib}" clean > /dev/null
+  make CC="${make_cc}" AR="${make_ar}" RANLIB="${make_ranlib}" \
+    CFLAGS="${cflags}" libbz2.a > /dev/null
   cp "bzlib.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libbz2.a" "${OUTPUT_DIR}/"
   strip_archive "${OUTPUT_DIR}/libbz2.a"
