@@ -653,19 +653,39 @@ build_zlib() {
 # ---------------------------------------------------------
 # Function to Build bzip2
 # ---------------------------------------------------------
+# ---------------------------------------------------------
+# Function to Build bzip2 (fixed)
+# ---------------------------------------------------------
 build_bzip2() {
   local tarball="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}.tar.gz"
   local src_dir="${DOWNLOAD_DIR}/bzip2-${BZIP2_VER}"
-  local cflags="${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64 -O2 -fno-tree-vectorize"
+
+  # Keep it conservative for GCC 9.2:
+  #  -O2 (not -O3), disable vectorizer, and explicitly disable AVX-512
+  # Also make Windows headers less hungry to avoid pulling intrinsics.
+  local cflags="-O2 -fno-tree-vectorize -mno-avx512f -D_FILE_OFFSET_BITS=64"
+  local cppflags="-DWIN32_LEAN_AND_MEAN"
+
+  # Let EXTRA_CFLAGS/EXTRA_CPPFLAGS extend, not replace
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
+  [[ -n "${EXTRA_CPPFLAGS:-}" ]] && cppflags="${EXTRA_CPPFLAGS} ${cppflags}"
+
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
+
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    CFLAGS="${cflags}" libbz2.a > /dev/null
+
+  # Single make invocation; ensure our flags are used
+  make \
+    CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
+    CFLAGS="${cflags}" \
+    CPPFLAGS="${cppflags}" \
+    libbz2.a
+
   cp "bzlib.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "libbz2.a" "${OUTPUT_DIR}/"
   strip_archive "${OUTPUT_DIR}/libbz2.a"
+
   popd > /dev/null
   echo "✅ Finished building libbz2.a into ${OUTPUT_DIR}!"
 }
