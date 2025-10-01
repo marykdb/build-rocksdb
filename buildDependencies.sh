@@ -697,6 +697,7 @@ build_bzip2() {
   local make_cc="${CC:-cc}"
   local make_ar="${AR:-ar}"
   local make_ranlib="${RANLIB:-ranlib}"
+  local using_alt_compiler=0
 
   if (( is_mingw )) && [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
     local alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
@@ -725,6 +726,7 @@ build_bzip2() {
     for candidate in "${cc_candidates[@]}"; do
       if [[ -x "$candidate" ]]; then
         make_cc="$(build_common::to_tool_path "$candidate")"
+        using_alt_compiler=1
         break
       fi
     done
@@ -740,6 +742,10 @@ build_bzip2() {
         break
       fi
     done
+  fi
+
+  if (( using_alt_compiler )); then
+    build_common::remove_matching_flag cflags '--target=*'
   fi
 
   pushd "${src_dir}" > /dev/null
@@ -773,6 +779,7 @@ build_zstd() {
   local make_cc="${CC:-cc}"
   local make_ar="${AR:-ar}"
   local make_ranlib="${RANLIB:-ranlib}"
+  local using_alt_compiler=0
 
   if is_mingw_build && [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
     local alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
@@ -801,6 +808,7 @@ build_zstd() {
     for candidate in "${cc_candidates[@]}"; do
       if [[ -x "$candidate" ]]; then
         make_cc="$(build_common::to_tool_path "$candidate")"
+        using_alt_compiler=1
         break
       fi
     done
@@ -816,6 +824,11 @@ build_zstd() {
         break
       fi
     done
+  fi
+
+  if (( using_alt_compiler )); then
+    build_common::remove_matching_flag zstd_cflags '--target=*'
+    build_common::remove_matching_flag zstd_cppflags '--target=*'
   fi
 
   make CC="${make_cc}" AR="${make_ar}" RANLIB="${make_ranlib}" clean > /dev/null

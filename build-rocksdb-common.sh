@@ -23,6 +23,34 @@ build_common::append_unique_flag() {
   printf -v "$var_name" '%s' "$current"
 }
 
+build_common::remove_matching_flag() {
+  local var_name="$1"
+  local pattern="$2"
+  if [[ -z "$pattern" ]]; then
+    return
+  fi
+
+  # shellcheck disable=SC2154
+  local current="${!var_name:-}"
+  if [[ -z "$current" ]]; then
+    return
+  fi
+
+  local -a tokens=()
+  read -r -a tokens <<<"$current"
+  local -a kept=()
+  local token
+  for token in "${tokens[@]}"; do
+    if [[ "$token" == $pattern ]]; then
+      continue
+    fi
+    kept+=("$token")
+  done
+
+  local result="${kept[*]}"
+  printf -v "$var_name" '%s' "$result"
+}
+
 build_common::compiler_is_clang() {
   local compiler="$1"
   if [[ -z "$compiler" ]]; then
