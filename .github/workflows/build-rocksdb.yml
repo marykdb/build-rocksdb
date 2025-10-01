@@ -144,41 +144,65 @@ jobs:
         run: |
           set -euo pipefail
           GCC9_VERSION=9.2.0
-          ARCHIVE_NAME="msys2-mingw-w64-x86_64-2.zip"
-          ARCHIVE_URL="https://download.jetbrains.com/kotlin/native/${ARCHIVE_NAME}"
-          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-          curl --fail --location --silent --show-error \
-            "${ARCHIVE_URL}" \
-            --output "$ARCHIVE_PATH"
+          WINLIBS_RELEASE="9.2.0-7.0.0-r3"
+          WINLIBS_ARCHIVE="mingw-w64-x86_64-${WINLIBS_RELEASE}.7z"
+          WINLIBS_URL="https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_RELEASE}/${WINLIBS_ARCHIVE}"
           TOOLCHAIN_DIR="$PWD/toolchains"
           GCC9_ROOT="$TOOLCHAIN_DIR/gcc-${GCC9_VERSION}"
           rm -rf "$GCC9_ROOT"
           mkdir -p "$GCC9_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$GCC9_ROOT" >/dev/null
-          rm -f "$ARCHIVE_PATH"
-          TOOLCHAIN_BASE="$GCC9_ROOT/msys2-mingw-w64-x86_64-2"
-          if [[ ! -d "$TOOLCHAIN_BASE" ]]; then
-            echo "Failed to locate msys2 GCC ${GCC9_VERSION} toolchain" >&2
+          WINLIBS_ARCHIVE_PATH="$PWD/${WINLIBS_ARCHIVE}"
+          curl --fail --location --silent --show-error \
+            "$WINLIBS_URL" \
+            --output "$WINLIBS_ARCHIVE_PATH"
+          7z x "$WINLIBS_ARCHIVE_PATH" -o"$GCC9_ROOT" >/dev/null
+          rm -f "$WINLIBS_ARCHIVE_PATH"
+          SYSROOT_BASE="$GCC9_ROOT/mingw64"
+          if [[ ! -d "$SYSROOT_BASE" ]]; then
+            echo "Failed to locate extracted mingw64 sysroot for GCC ${GCC9_VERSION}" >&2
             exit 1
           fi
-          BIN_DIR="$TOOLCHAIN_BASE/bin"
+          SYSROOT="$(cd "$SYSROOT_BASE" && pwd)"
+          BIN_DIR="$SYSROOT/bin"
           if [[ ! -d "$BIN_DIR" ]]; then
             echo "Failed to locate GCC ${GCC9_VERSION} bin directory" >&2
             exit 1
           fi
           echo "${BIN_DIR//\\/\\\\}" >> "$GITHUB_PATH"
-          echo "MINGW_GCC_ROOT=${TOOLCHAIN_BASE//\\/\\\\}" >> "$GITHUB_ENV"
-          if [[ -d "$TOOLCHAIN_BASE/x86_64-w64-mingw32" ]]; then
-            SYSROOT="$TOOLCHAIN_BASE/x86_64-w64-mingw32"
-          else
-            SYSROOT="$TOOLCHAIN_BASE"
+          echo "MINGW_GCC_ROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV"
+
+          # Replace the stdlib binaries with the JetBrains-distributed variants
+          RUNTIME_ARCHIVE="msys2-mingw-w64-x86_64-2.zip"
+          RUNTIME_URL="https://download.jetbrains.com/kotlin/native/${RUNTIME_ARCHIVE}"
+          RUNTIME_ARCHIVE_PATH="$PWD/${RUNTIME_ARCHIVE}"
+          curl --fail --location --silent --show-error \
+            "$RUNTIME_URL" \
+            --output "$RUNTIME_ARCHIVE_PATH"
+          RUNTIME_STAGING="$GCC9_ROOT/runtime"
+          rm -rf "$RUNTIME_STAGING"
+          mkdir -p "$RUNTIME_STAGING"
+          7z x "$RUNTIME_ARCHIVE_PATH" -o"$RUNTIME_STAGING" >/dev/null
+          rm -f "$RUNTIME_ARCHIVE_PATH"
+          RUNTIME_LIB_DIR="$RUNTIME_STAGING/msys2-mingw-w64-x86_64-2/lib/gcc/x86_64-w64-mingw32/${GCC9_VERSION}"
+          DEST_LIB_PARENT="$SYSROOT/lib/gcc/x86_64-w64-mingw32"
+          DEST_LIB_DIR="$DEST_LIB_PARENT/${GCC9_VERSION}"
+          if [[ ! -d "$RUNTIME_LIB_DIR" ]]; then
+            echo "Failed to locate JetBrains runtime lib directory" >&2
+            exit 1
           fi
-          SYSROOT="$(cd "$SYSROOT" && pwd)"
-          SYSROOT_BASE="$(cd "$TOOLCHAIN_BASE" && pwd)"
+          if [[ ! -d "$DEST_LIB_PARENT" ]]; then
+            echo "Missing destination GCC lib parent directory" >&2
+            exit 1
+          fi
+          rm -rf "$DEST_LIB_DIR"
+          mkdir -p "$DEST_LIB_DIR"
+          cp -af "$RUNTIME_LIB_DIR/." "$DEST_LIB_DIR/"
+          rm -rf "$RUNTIME_STAGING"
+
           echo "MINGW_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV"
           echo "MINGW_GCC92_SYSROOT=${SYSROOT//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
-          if [[ "$SYSROOT" != "$SYSROOT_BASE" ]]; then
-            echo "MINGW_FALLBACK_SYSROOT=${SYSROOT_BASE//\\/\\\\}" >> "$GITHUB_ENV"
+          if [[ -d "$SYSROOT/.." ]]; then
+            echo "MINGW_FALLBACK_SYSROOT=$(cd "$SYSROOT/.." && pwd | sed 's/\\/\\\\/g')" >> "$GITHUB_ENV"
           fi
       - name: Provision alternate GCC for bzip2
         run: |
