@@ -768,13 +768,58 @@ build_zstd() {
   fi
   pushd "${src_dir}/lib" > /dev/null
   local zstd_cflags="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
-  if is_mingw_build; then
-    zstd_cflags+=" -fno-tree-vectorize"
-  fi
   local zstd_cppflags="${EXTRA_CFLAGS} -DDEBUGLEVEL=0"
 
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" clean > /dev/null
-  make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
+  local make_cc="${CC:-cc}"
+  local make_ar="${AR:-ar}"
+  local make_ranlib="${RANLIB:-ranlib}"
+
+  if is_mingw_build && [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
+    local alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
+    local triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-x86_64-w64-mingw32}}"
+
+    local -a cc_candidates=(
+      "${alt_bin_dir}/${triple}-gcc"
+      "${alt_bin_dir}/${triple}-gcc.exe"
+      "${alt_bin_dir}/gcc"
+      "${alt_bin_dir}/gcc.exe"
+    )
+    local -a ar_candidates=(
+      "${alt_bin_dir}/${triple}-ar"
+      "${alt_bin_dir}/${triple}-ar.exe"
+      "${alt_bin_dir}/ar"
+      "${alt_bin_dir}/ar.exe"
+    )
+    local -a ranlib_candidates=(
+      "${alt_bin_dir}/${triple}-ranlib"
+      "${alt_bin_dir}/${triple}-ranlib.exe"
+      "${alt_bin_dir}/ranlib"
+      "${alt_bin_dir}/ranlib.exe"
+    )
+
+    local candidate
+    for candidate in "${cc_candidates[@]}"; do
+      if [[ -x "$candidate" ]]; then
+        make_cc="$(build_common::to_tool_path "$candidate")"
+        break
+      fi
+    done
+    for candidate in "${ar_candidates[@]}"; do
+      if [[ -x "$candidate" ]]; then
+        make_ar="$(build_common::to_tool_path "$candidate")"
+        break
+      fi
+    done
+    for candidate in "${ranlib_candidates[@]}"; do
+      if [[ -x "$candidate" ]]; then
+        make_ranlib="$(build_common::to_tool_path "$candidate")"
+        break
+      fi
+    done
+  fi
+
+  make CC="${make_cc}" AR="${make_ar}" RANLIB="${make_ranlib}" clean > /dev/null
+  make CC="${make_cc}" AR="${make_ar}" RANLIB="${make_ranlib}" \
     HAVE_PTHREAD=0 ZSTD_LEGACY_SUPPORT=0 \
     CFLAGS="${zstd_cflags}" \
     CPPFLAGS="${zstd_cppflags}" \
