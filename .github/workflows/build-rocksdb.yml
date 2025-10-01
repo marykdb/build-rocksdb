@@ -192,6 +192,21 @@ jobs:
           fi
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
+      - name: Verify libstdc++ usage in MinGW build
+        run: |
+          set -euo pipefail
+          LIB_PATH="build/lib/mingw_x86_64/rocksdb-build/librocksdb.a"
+          if [[ ! -f "$LIB_PATH" ]]; then
+            LIB_PATH="build/lib/mingw_x86_64/librocksdb.a"
+          fi
+          if [[ ! -f "$LIB_PATH" ]]; then
+            echo "Failed to locate built librocksdb.a in expected directories" >&2
+            exit 1
+          fi
+          if llvm-nm -C "$LIB_PATH" | grep -q "std::__1::"; then
+            echo "Error: Detected libc++ symbols (std::__1) in librocksdb.a. Expected libstdc++." >&2
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-mingw-x86_64
