@@ -122,8 +122,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   fi
 
   if (( use_clang )); then
-    build_common::append_unique_flag EXTRA_C_FLAGS "-fno-emulated-tls"
-    build_common::append_unique_flag EXTRA_CXX_FLAGS "-fno-emulated-tls"
+    build_common::append_unique_flag EXTRA_C_FLAGS "-femulated-tls"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-femulated-tls"
     if [[ -z "${MINGW_SYSROOT:-}" ]]; then
       build_common::prefer_llvm_mingw_sysroot "${TOOLCHAIN_TRIPLE}"
     else
