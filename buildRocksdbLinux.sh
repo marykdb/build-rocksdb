@@ -69,6 +69,8 @@ case "$ARCH" in
     ;;
  esac
 
+build_common::append_unique_flag EXTRA_C_FLAGS "-g"
+
 resolve_tool() {
   local current="$1"
   local fallback="$2"
@@ -126,6 +128,7 @@ cmake_args+=(
 )
 
 EXTRA_CXX_FLAGS="$EXTRA_C_FLAGS"
+build_common::append_unique_flag EXTRA_CXX_FLAGS "-g"
 
 build_common::cmake_configure \
   "$REPO_ROOT" \

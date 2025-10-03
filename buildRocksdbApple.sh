@@ -102,7 +102,7 @@ fi
 SIM_SUFFIX=$([[ "$SIMULATOR" == true ]] && echo "_simulator" || echo "")
 BUILD_DIR="${REPO_ROOT}/build/lib/${PLATFORM}${SIM_SUFFIX}_${ARCH}"
 
-EXTRA_C_FLAGS="${MIN_FLAG} ${TARGET_TRIPLE} -g0 -ffunction-sections -fdata-sections -isysroot ${SDK_PATH} -I${REPO_ROOT}/build/include -I${REPO_ROOT}/build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
+EXTRA_C_FLAGS="${MIN_FLAG} ${TARGET_TRIPLE} -g -ffunction-sections -fdata-sections -isysroot ${SDK_PATH} -I${REPO_ROOT}/build/include -I${REPO_ROOT}/build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_CXX_FLAGS="$EXTRA_C_FLAGS"
 
 # Endianness and libc differences on Apple mobile platforms

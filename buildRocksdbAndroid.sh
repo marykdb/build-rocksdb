@@ -105,7 +105,7 @@ fi
 
 mkdir -p "$BUILD_DIR"
 
-EXTRA_FLAGS="-fPIC -g0 -ffunction-sections -fdata-sections -DANDROID -I${PROJECT_ROOT}/build/include -I${PROJECT_ROOT}/build/include/dependencies"
+EXTRA_FLAGS="-fPIC -g -ffunction-sections -fdata-sections -DANDROID -I${PROJECT_ROOT}/build/include -I${PROJECT_ROOT}/build/include/dependencies"
 EXTRA_FLAGS+=" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 EXTRA_FLAGS+=" ${ANDROID_TOOLCHAIN_EXTRA_CFLAGS}"
 

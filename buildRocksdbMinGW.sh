@@ -110,6 +110,9 @@ case "$ARCH" in
     ;;
 esac
 
+build_common::append_unique_flag EXTRA_C_FLAGS "-g"
+build_common::append_unique_flag EXTRA_CXX_FLAGS "-g"
+
 if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::ensure_mingw_environment "${TOOLCHAIN_TRIPLE}" "${CC:-}"
   export MINGW_TRIPLE="${TOOLCHAIN_TRIPLE}"

@@ -503,11 +503,11 @@ jobs:
           fi
           timestamp="$(date +'%Y%m%dT%H%M%S')Z"
           echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
-          echo "tag=rocksdb-${ROCKSDB_VERSION}-${timestamp}" >> "$GITHUB_OUTPUT"
+          echo "tag=rocksdb-with-symbols-${ROCKSDB_VERSION}-${timestamp}" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/**/*.zip
-          name: RocksDB ${{ steps.rocksdb_version.outputs.version }} builds ${{ steps.release_metadata.outputs.timestamp }}
+          name: RocksDB With Symbols ${{ steps.rocksdb_version.outputs.version }} builds ${{ steps.release_metadata.outputs.timestamp }}
           tag_name: ${{ steps.release_metadata.outputs.tag }}
           draft: false
           prerelease: false
