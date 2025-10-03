@@ -10,7 +10,7 @@ ld.lld: comdat section .pdata$_ZN7rocksdb9DBOptionsD2Ev without leader and unass
 ```
 
 The messages appear while `lld` is scanning `libstdc++.a` (the standard C++ library
-from the MSYS2 GCC 9.2 toolchain bundled with Kotlin/Native) and the `librocksdb.a`
+from the GCC 9.5 toolchain provided by the host system) and the `librocksdb.a`
 static library that ships in this repository's Windows archive. The MinGW build
 script compiles RocksDB with the GNU libstdc++ runtime (`-stdlib=libstdc++`), which
 is why `lld` has to inspect that archive as part of the link step.【F:buildRocksdbMinGW.sh†L102-L178】

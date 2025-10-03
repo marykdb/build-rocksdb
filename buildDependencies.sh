@@ -699,8 +699,16 @@ build_bzip2() {
   local make_ranlib="${RANLIB:-ranlib}"
   local using_alt_compiler=0
 
-  if (( is_mingw )) && [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
-    local alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
+  local alt_bin_dir=""
+  if (( is_mingw )); then
+    if [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
+      alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
+    elif [[ -n "${MINGW_SYSROOT:-}" && -d "${MINGW_SYSROOT}/bin" ]]; then
+      alt_bin_dir="${MINGW_SYSROOT}/bin"
+    fi
+  fi
+
+  if [[ -n "$alt_bin_dir" ]]; then
     local triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-x86_64-w64-mingw32}}"
 
     local -a cc_candidates=(
@@ -781,8 +789,16 @@ build_zstd() {
   local make_ranlib="${RANLIB:-ranlib}"
   local using_alt_compiler=0
 
-  if is_mingw_build && [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
-    local alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
+  local alt_bin_dir=""
+  if is_mingw_build; then
+    if [[ -n "${BZIP2_GCC_BIN_DIR:-}" ]]; then
+      alt_bin_dir="${BZIP2_GCC_BIN_DIR}"
+    elif [[ -n "${MINGW_SYSROOT:-}" && -d "${MINGW_SYSROOT}/bin" ]]; then
+      alt_bin_dir="${MINGW_SYSROOT}/bin"
+    fi
+  fi
+
+  if [[ -n "$alt_bin_dir" ]]; then
     local triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-x86_64-w64-mingw32}}"
 
     local -a cc_candidates=(

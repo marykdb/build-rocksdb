@@ -170,38 +170,7 @@ jobs:
           printf '%s\n' "$LLVM_MINGW_BIN_UNIX" >> "$GITHUB_PATH"
           printf 'LLVM_MINGW_ROOT=%s\n' "${LLVM_MINGW_ROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
 
-      - name: Provision GCC runtime for libstdc++
-        run: |
-          set -euo pipefail
-          RUNTIME_ARCHIVE="msys2-mingw-w64-x86_64-2.zip"
-          RUNTIME_URL="https://download.jetbrains.com/kotlin/native/${RUNTIME_ARCHIVE}"
-          ARCHIVE_PATH="$PWD/${RUNTIME_ARCHIVE}"
-          curl --fail --location --silent --show-error \
-            "$RUNTIME_URL" \
-            --output "$ARCHIVE_PATH"
-          RUNTIME_ROOT="$PWD/toolchains/jetbrains-msys2"
-          rm -rf "$RUNTIME_ROOT"
-          mkdir -p "$RUNTIME_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$RUNTIME_ROOT" >/dev/null
-          rm -f "$ARCHIVE_PATH"
-          SYSROOT_CANDIDATE="$RUNTIME_ROOT/msys2-mingw-w64-x86_64-2"
-          if [[ ! -d "$SYSROOT_CANDIDATE/include" ]]; then
-            echo "Failed to locate JetBrains sysroot includes at $SYSROOT_CANDIDATE" >&2
-            exit 1
-          fi
-          if command -v cygpath >/dev/null 2>&1; then
-            SYSROOT_UNIX="$(cygpath -u "$SYSROOT_CANDIDATE")"
-            SYSROOT_PARENT_UNIX="$(cygpath -u "${SYSROOT_CANDIDATE}/.." 2>/dev/null || true)"
-          else
-            SYSROOT_UNIX="$SYSROOT_CANDIDATE"
-            SYSROOT_PARENT_UNIX="${SYSROOT_CANDIDATE}/.."
-          fi
-          printf 'MINGW_SYSROOT=%s\n' "${SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-          printf 'MINGW_GCC92_SYSROOT=%s\n' "${SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
-          if [[ -n "$SYSROOT_PARENT_UNIX" && "$SYSROOT_PARENT_UNIX" != "$SYSROOT_UNIX" ]]; then
-            printf 'MINGW_FALLBACK_SYSROOT=%s\n' "${SYSROOT_PARENT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-          fi
-      - name: Provision alternate GCC for bzip2
+      - name: Provision GCC 9.5 toolchain and runtime
         run: |
           set -euo pipefail
           GCC9_VERSION=9.5.0
@@ -239,7 +208,8 @@ jobs:
             ALT_SYSROOT_UNIX="$ALT_SYSROOT"
             ALT_BIN_UNIX="$ALT_BIN_DIR"
           fi
-          echo "BZIP2_GCC_SYSROOT=${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
+          printf 'MINGW_SYSROOT=%s\n' "${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
+          printf 'MINGW_FALLBACK_SYSROOT=%s\n' "${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
           echo "BZIP2_GCC_BIN_DIR=${ALT_BIN_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
