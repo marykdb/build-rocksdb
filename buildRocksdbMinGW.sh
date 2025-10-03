@@ -136,12 +136,23 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"
     mingw_sysroots=()
-    if [[ -n "${MINGW_SYSROOT:-}" ]]; then
-      mingw_sysroots+=("${MINGW_SYSROOT}")
-    fi
-    if [[ -n "${MINGW_FALLBACK_SYSROOT:-}" && "${MINGW_FALLBACK_SYSROOT}" != "${MINGW_SYSROOT:-}" ]]; then
-      mingw_sysroots+=("${MINGW_FALLBACK_SYSROOT}")
-    fi
+    for candidate_sysroot in "${MINGW_SYSROOT:-}" "${MINGW_FALLBACK_SYSROOT:-}" "${MINGW_GCC_SYSROOT:-}"; do
+      if [[ -z "$candidate_sysroot" ]]; then
+        continue
+      fi
+      already_added=0
+      if (( ${#mingw_sysroots[@]} )); then
+        for existing_sysroot in "${mingw_sysroots[@]}"; do
+          if [[ "${existing_sysroot%/}" == "${candidate_sysroot%/}" ]]; then
+            already_added=1
+            break
+          fi
+        done
+      fi
+      if (( !already_added )); then
+        mingw_sysroots+=("$candidate_sysroot")
+      fi
+    done
     if (( ${#mingw_sysroots[@]} )); then
       mingw_link_dirs=()
       for current_sysroot in "${mingw_sysroots[@]}"; do

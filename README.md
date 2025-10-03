@@ -43,7 +43,7 @@ The archives are staged under `build/archives/` during a build and can be publis
 
 ### Windows (MinGW) toolchain baseline
 - Continuous integration provisions [`llvm-mingw-20241030-ucrt-x86_64`](https://github.com/mstorsjo/llvm-mingw/releases/tag/20241030), the first long-lived toolchain built from LLVM 19. `./buildRocksdbMinGW.sh` and `buildDependencies.sh` automatically pick it up when `LLVM_MINGW_ROOT` points at the extracted directory.
-- MinGW artifacts now rely solely on the GCC 9.5 libstdc++ runtime that ships with the host's system toolchain, eliminating the previous dependency on the JetBrains-distributed variant. The build exports that runtime as the primary `MINGW_SYSROOT` while retaining the prior LLVM sysroot in `MINGW_FALLBACK_SYSROOT` so clang-based steps can still search headers and libraries from both locations when required.
+- MinGW artifacts now rely solely on the GCC 9.5 libstdc++ runtime that ships with the host's system toolchain, eliminating the previous dependency on the JetBrains-distributed variant. Clang continues to consume the LLVM-provided headers via `MINGW_SYSROOT`, while the WinLibs runtime is surfaced through `MINGW_FALLBACK_SYSROOT` and `MINGW_GCC_SYSROOT` so compiler and linker searches cover both toolchains without conflicting intrinsics.
 
 ## Usage examples
 - List available build configurations:

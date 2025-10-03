@@ -208,9 +208,9 @@ jobs:
             ALT_SYSROOT_UNIX="$ALT_SYSROOT"
             ALT_BIN_UNIX="$ALT_BIN_DIR"
           fi
-          printf 'MINGW_SYSROOT=%s\n' "${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
+          printf '%s\n' "$ALT_BIN_UNIX" >> "$GITHUB_PATH"
+          printf 'MINGW_GCC_SYSROOT=%s\n' "${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
           printf 'MINGW_FALLBACK_SYSROOT=%s\n' "${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-          echo "BZIP2_GCC_BIN_DIR=${ALT_BIN_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - name: Verify libstdc++ usage in MinGW build
