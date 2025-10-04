@@ -631,6 +631,10 @@ build_zlib() {
   local cflags="${OPT_CFLAGS} -DNO_GZCOMPRESS -DNO_GZIP"
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
 
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    build_common::append_unique_flag cflags "-fvisibility=hidden"
+  fi
+
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
   pushd "${src_dir}" > /dev/null
 
@@ -691,6 +695,10 @@ build_bzip2() {
     cflags+=" -O2 -fno-tree-vectorize"
   fi
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
+
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    build_common::append_unique_flag cflags "-fvisibility=hidden"
+  fi
 
   tar xzf "${tarball}" -C "${DOWNLOAD_DIR}" --no-same-owner --no-same-permissions > /dev/null
 
@@ -775,6 +783,10 @@ build_zstd() {
   pushd "${src_dir}/lib" > /dev/null
   local zstd_cflags="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
   local zstd_cppflags="${EXTRA_CFLAGS} -DDEBUGLEVEL=0"
+
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    build_common::append_unique_flag zstd_cflags "-fvisibility=hidden"
+  fi
 
   local make_cc="${CC:-cc}"
   local make_ar="${AR:-ar}"
@@ -900,6 +912,14 @@ build_snappy() {
     snappy_toolchain_args+=( -DSNAPPY_HAVE_NEON=0 )
   fi
 
+  local snappy_c_flags="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
+  local snappy_cxx_flags="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
+
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    snappy_c_flags="${snappy_c_flags} -fvisibility=hidden"
+    snappy_cxx_flags="${snappy_cxx_flags} -fvisibility=hidden -fvisibility-inlines-hidden -fno-exceptions -fno-rtti"
+  fi
+
   local -a cmake_configure=(
     -G Ninja
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -907,8 +927,11 @@ build_snappy() {
     -DBUILD_SHARED_LIBS=OFF
     -DCMAKE_INSTALL_PREFIX="${install_prefix}"
     -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
-    -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
+    -DCMAKE_C_FLAGS="${snappy_c_flags}"
+    -DCMAKE_CXX_FLAGS="${snappy_cxx_flags}"
+    -DCMAKE_C_VISIBILITY_PRESET=hidden
+    -DCMAKE_CXX_VISIBILITY_PRESET=hidden
+    -DVISIBILITY_INLINES_HIDDEN=ON
     -DSNAPPY_BUILD_BENCHMARKS=OFF
     -DSNAPPY_BUILD_TESTS=OFF
     -Wno-dev
@@ -1068,8 +1091,13 @@ build_lz4() {
     TARGET_OS="Linux"
   fi
 
+  local lz4_cflags="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    build_common::append_unique_flag lz4_cflags "-fvisibility=hidden"
+  fi
+
   make CC="${CC:-cc}" AR="${AR:-ar}" RANLIB="${RANLIB:-ranlib}" \
-    TARGET_OS=$TARGET_OS CFLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}" LDFLAGS="${EXTRA_LDFLAGS}" liblz4.a > /dev/null
+    TARGET_OS=$TARGET_OS CFLAGS="${lz4_cflags}" LDFLAGS="${EXTRA_LDFLAGS}" liblz4.a > /dev/null
   cp "lz4.h" "lz4hc.h" "${DEPENDENCY_INCLUDE_DIR}/"
   cp "liblz4.a" "${OUTPUT_DIR}/"
   strip_archive "${OUTPUT_DIR}/liblz4.a"
