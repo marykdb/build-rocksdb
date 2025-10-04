@@ -114,7 +114,6 @@ build_common::append_unique_flag EXTRA_C_FLAGS "-fvisibility=hidden"
 
 build_common::append_unique_flag EXTRA_CXX_FLAGS "-fvisibility=hidden"
 build_common::append_unique_flag EXTRA_CXX_FLAGS "-fvisibility-inlines-hidden"
-build_common::append_unique_flag EXTRA_CXX_FLAGS "-fno-exceptions"
 build_common::append_unique_flag EXTRA_CXX_FLAGS "-fno-rtti"
 
 if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
