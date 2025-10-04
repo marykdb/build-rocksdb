@@ -281,10 +281,14 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     local_mingw_uses_clang=1
   fi
   if (( local_mingw_uses_clang )); then
+    build_common::append_unique_flag EXTRA_CFLAGS "-fno-auto-import"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-fno-auto-import"
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-auto-import"
+    build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-runtime-pseudo-reloc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_link_dirs=()
       mingw_link_dirs+=("${MINGW_SYSROOT}/lib")
@@ -387,10 +391,14 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     local_mingw_uses_clang=1
   fi
   if (( local_mingw_uses_clang )); then
+    build_common::append_unique_flag EXTRA_CFLAGS "-fno-auto-import"
+    build_common::append_unique_flag EXTRA_CXXFLAGS "-fno-auto-import"
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-auto-import"
+    build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-runtime-pseudo-reloc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_link_dirs=()
       mingw_link_dirs+=("${MINGW_SYSROOT}/lib")
@@ -900,6 +908,13 @@ build_snappy() {
     snappy_toolchain_args+=( -DSNAPPY_HAVE_NEON=0 )
   fi
 
+  local snappy_c_flags="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
+  local snappy_cxx_flags="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    snappy_c_flags+=" -DSNAPPY_STATIC"
+    snappy_cxx_flags+=" -DSNAPPY_STATIC"
+  fi
+
   local -a cmake_configure=(
     -G Ninja
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -907,14 +922,22 @@ build_snappy() {
     -DBUILD_SHARED_LIBS=OFF
     -DCMAKE_INSTALL_PREFIX="${install_prefix}"
     -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
-    -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
+    -DCMAKE_C_FLAGS="${snappy_c_flags}"
+    -DCMAKE_CXX_FLAGS="${snappy_cxx_flags}"
     -DSNAPPY_BUILD_BENCHMARKS=OFF
     -DSNAPPY_BUILD_TESTS=OFF
     -Wno-dev
   )
 
   cmake_configure+=( "${snappy_toolchain_args[@]}" )
+
+  if [[ -n "${EXTRA_LDFLAGS:-}" ]]; then
+    cmake_configure+=(
+      "-DCMAKE_EXE_LINKER_FLAGS=\"${EXTRA_LDFLAGS}\""
+      "-DCMAKE_SHARED_LINKER_FLAGS=\"${EXTRA_LDFLAGS}\""
+      "-DCMAKE_MODULE_LINKER_FLAGS=\"${EXTRA_LDFLAGS}\""
+    )
+  fi
 
   if [[ -n "${MINGW_INCLUDE_DIRECTORIES:-}" ]]; then
     cmake_configure+=(

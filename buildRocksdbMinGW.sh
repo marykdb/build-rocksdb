@@ -124,6 +124,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   if (( use_clang )); then
     build_common::append_unique_flag EXTRA_C_FLAGS "-femulated-tls"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-femulated-tls"
+    build_common::append_unique_flag EXTRA_C_FLAGS "-fno-auto-import"
+    build_common::append_unique_flag EXTRA_CXX_FLAGS "-fno-auto-import"
     if [[ -z "${MINGW_SYSROOT:-}" ]]; then
       build_common::prefer_llvm_mingw_sysroot "${TOOLCHAIN_TRIPLE}"
     else
@@ -135,6 +137,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     build_common::append_unique_flag EXTRA_C_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-Wno-#warnings"
     build_common::append_unique_flag MINGW_LINK_FLAGS "-unwindlib=libgcc"
+    build_common::append_unique_flag MINGW_LINK_FLAGS "-Wl,--disable-auto-import"
+    build_common::append_unique_flag MINGW_LINK_FLAGS "-Wl,--disable-runtime-pseudo-reloc"
     mingw_sysroots=()
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_sysroots+=("${MINGW_SYSROOT}")
