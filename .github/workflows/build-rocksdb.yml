@@ -267,6 +267,95 @@ jobs:
             echo "Error: Detected libc++ symbols (std::__1) in librocksdb.a. Expected libstdc++." >&2
             exit 1
           fi
+      - name: Create fat librocksdb.a with codec archives
+        run: |
+          set -euo pipefail
+
+          LIB_ROOT="build/lib/mingw_x86_64"
+          if [[ ! -d "$LIB_ROOT" ]]; then
+            echo "Expected library directory $LIB_ROOT not found" >&2
+            exit 1
+          fi
+
+          ROCKSDB_LIB="$LIB_ROOT/librocksdb.a"
+          if [[ ! -f "$ROCKSDB_LIB" ]]; then
+            ROCKSDB_LIB="$LIB_ROOT/rocksdb-build/librocksdb.a"
+          fi
+          if [[ ! -f "$ROCKSDB_LIB" ]]; then
+            echo "Unable to locate librocksdb.a under $LIB_ROOT" >&2
+            exit 1
+          fi
+
+          FAT_LIB="$LIB_ROOT/librocksdb-fat.a"
+          rm -f "$FAT_LIB"
+
+          find_ar() {
+            if command -v llvm-ar >/dev/null 2>&1; then
+              echo "llvm-ar"
+              return
+            fi
+            if [[ -n "${MINGW_TRIPLE:-}" ]] && command -v "${MINGW_TRIPLE}-ar" >/dev/null 2>&1; then
+              echo "${MINGW_TRIPLE}-ar"
+              return
+            fi
+            if command -v ar >/dev/null 2>&1; then
+              echo "ar"
+              return
+            fi
+            echo ""
+          }
+
+          AR_BIN="$(find_ar)"
+          if [[ -z "$AR_BIN" ]]; then
+            echo "Failed to locate an archiver (llvm-ar/ar)" >&2
+            exit 1
+          fi
+
+          codec_paths=(
+            "$LIB_ROOT/libbz2.a"
+            "$LIB_ROOT/libz.a"
+            "$LIB_ROOT/libzstd.a"
+            "$LIB_ROOT/libsnappy.a"
+            "$LIB_ROOT/liblz4.a"
+          )
+
+          missing_codecs=()
+          for codec_path in "${codec_paths[@]}"; do
+            if [[ ! -f "$codec_path" ]]; then
+              missing_codecs+=("${codec_path##*/}")
+            fi
+          done
+
+          if (( ${#missing_codecs[@]} )); then
+            echo "Missing codec archives required for fat library: ${missing_codecs[*]}" >&2
+            exit 1
+          fi
+
+          {
+            echo "CREATE $FAT_LIB"
+            echo "ADDLIB $ROCKSDB_LIB"
+            printf 'ADDLIB %s\n' "${codec_paths[@]}"
+            echo 'SAVE'
+            echo 'END'
+          } | "$AR_BIN" -M
+
+          if [[ ! -f "$FAT_LIB" ]]; then
+            echo "Failed to create fat library at $FAT_LIB" >&2
+            exit 1
+          fi
+
+          ARCHIVE_PATH="build/archives/rocksdb-mingw-x86_64.zip"
+          if [[ ! -f "$ARCHIVE_PATH" ]]; then
+            echo "Archive $ARCHIVE_PATH not found" >&2
+            exit 1
+          fi
+
+          python -c "import pathlib, zipfile; \
+            archive = pathlib.Path('build/archives/rocksdb-mingw-x86_64.zip'); \
+            fat_lib = pathlib.Path('build/lib/mingw_x86_64/librocksdb-fat.a'); \
+            \
+            if not fat_lib.exists(): raise SystemExit(f'Fat library {fat_lib} not found'); \
+            with zipfile.ZipFile(archive, mode='a') as zf: zf.write(fat_lib, arcname='lib/librocksdb-fat.a')"
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-mingw-x86_64
