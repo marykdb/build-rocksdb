@@ -57,6 +57,47 @@ build_common::compiler_is_clang() {
     return 1
   fi
 
+  # Trim whitespace that may surround the command.
+  compiler="${compiler#${compiler%%[![:space:]]*}}"
+  compiler="${compiler%${compiler##*[![:space:]]}}"
+  if [[ -z "$compiler" ]]; then
+    return 1
+  fi
+
+  local first_char="${compiler:0:1}"
+  local last_char="${compiler: -1}"
+  if [[ "$first_char" == '"' && "$last_char" == '"' && ${#compiler} -ge 2 ]]; then
+    compiler="${compiler:1:${#compiler}-2}"
+  elif [[ "$first_char" == "'" && "$last_char" == "'" && ${#compiler} -ge 2 ]]; then
+    compiler="${compiler:1:${#compiler}-2}"
+  fi
+
+  # If the command string contains wrappers or extra arguments (e.g. "ccache clang"),
+  # walk the tokens from right to left and detect clang usage on each token that looks
+  # like an executable name.
+  local -a compiler_tokens=()
+  # shellcheck disable=SC2206 # intentional word splitting
+  compiler_tokens=( $compiler )
+  if (( ${#compiler_tokens[@]} > 1 )); then
+    local token
+    for (( idx=${#compiler_tokens[@]}-1; idx>=0; idx-- )); do
+      token="${compiler_tokens[idx]}"
+      [[ -n "$token" ]] || continue
+      # Skip environment-style assignments or obvious flags.
+      if [[ "$token" == *=* || "$token" == -* ]]; then
+        continue
+      fi
+      if build_common::compiler_is_clang "$token"; then
+        return 0
+      fi
+      case "$token" in
+        ccache|sccache|distcc|env|/usr/bin/env)
+          continue
+          ;;
+      esac
+    done
+  fi
+
   if [[ "$compiler" == *clang* ]]; then
     return 0
   fi
