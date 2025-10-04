@@ -351,18 +351,18 @@ jobs:
           fi
 
           python <<'PY'
-import pathlib
-import zipfile
+          import pathlib
+          import zipfile
 
-archive = pathlib.Path('build/archives/rocksdb-mingw-x86_64.zip')
-fat_lib = pathlib.Path('build/lib/mingw_x86_64/librocksdb-fat.a')
+          archive = pathlib.Path('build/archives/rocksdb-mingw-x86_64.zip')
+          fat_lib = pathlib.Path('build/lib/mingw_x86_64/librocksdb-fat.a')
 
-if not fat_lib.exists():
-    raise SystemExit(f'Fat library {fat_lib} not found')
+          if not fat_lib.exists():
+              raise SystemExit(f'Fat library {fat_lib} not found')
 
-with zipfile.ZipFile(archive, mode='a') as zf:
-    zf.write(fat_lib, arcname='lib/librocksdb-fat.a')
-PY
+          with zipfile.ZipFile(archive, mode='a') as zf:
+              zf.write(fat_lib, arcname='lib/librocksdb-fat.a')
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-mingw-x86_64
