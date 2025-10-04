@@ -280,6 +280,8 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   elif build_common::compiler_is_clang "${CXX:-}"; then
     local_mingw_uses_clang=1
   fi
+  build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-auto-import"
+
   if (( local_mingw_uses_clang )); then
     build_common::append_unique_flag EXTRA_CFLAGS "-fno-auto-import"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-fno-auto-import"
@@ -287,7 +289,6 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
-    build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-auto-import"
     build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-runtime-pseudo-reloc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_link_dirs=()
@@ -390,6 +391,8 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   elif build_common::compiler_is_clang "${CXX:-}"; then
     local_mingw_uses_clang=1
   fi
+  build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-auto-import"
+
   if (( local_mingw_uses_clang )); then
     build_common::append_unique_flag EXTRA_CFLAGS "-fno-auto-import"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-fno-auto-import"
@@ -397,7 +400,6 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "-stdlib=libstdc++"
     build_common::append_unique_flag EXTRA_LDFLAGS "-unwindlib=libgcc"
-    build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-auto-import"
     build_common::append_unique_flag EXTRA_LDFLAGS "-Wl,--disable-runtime-pseudo-reloc"
     if [[ -n "${MINGW_SYSROOT:-}" ]]; then
       mingw_link_dirs=()
