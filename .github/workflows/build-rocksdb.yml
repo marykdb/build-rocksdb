@@ -257,6 +257,18 @@ jobs:
           echo "BZIP2_GCC_BIN_DIR=${ALT_BIN_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
+      - name: Ensure Snappy was compiled with SNAPPY_STATIC
+        run: |
+          set -euo pipefail
+          cache_path="build/lib/mingw_x86_64/deps/snappy/CMakeCache.txt"
+          if [[ ! -f "$cache_path" ]]; then
+            echo "Failed to locate Snappy CMake cache at $cache_path" >&2
+            exit 1
+          fi
+          if ! grep -F "-DSNAPPY_STATIC" "$cache_path" >/dev/null; then
+            echo "SNAPPY_STATIC define missing from MinGW Snappy build" >&2
+            exit 1
+          fi
       - name: Verify libstdc++ usage in MinGW build
         run: |
           set -euo pipefail
