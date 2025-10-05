@@ -900,6 +900,20 @@ build_snappy() {
     snappy_toolchain_args+=( -DSNAPPY_HAVE_NEON=0 )
   fi
 
+  local snappy_c_flags="${OPT_CFLAGS}"
+  local snappy_cxx_flags="${OPT_CFLAGS}"
+  if [[ -n "${EXTRA_CFLAGS:-}" ]]; then
+    snappy_c_flags="${EXTRA_CFLAGS} ${snappy_c_flags}"
+  fi
+  if [[ -n "${EXTRA_CXXFLAGS:-}" ]]; then
+    snappy_cxx_flags="${EXTRA_CXXFLAGS} ${snappy_cxx_flags}"
+  fi
+
+  if [[ "$OUTPUT_DIR" == *mingw_* ]]; then
+    build_common::append_unique_flag snappy_c_flags "-DSNAPPY_STATIC"
+    build_common::append_unique_flag snappy_cxx_flags "-DSNAPPY_STATIC"
+  fi
+
   local -a cmake_configure=(
     -G Ninja
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5
@@ -907,8 +921,8 @@ build_snappy() {
     -DBUILD_SHARED_LIBS=OFF
     -DCMAKE_INSTALL_PREFIX="${install_prefix}"
     -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_C_FLAGS="${EXTRA_CFLAGS} ${OPT_CFLAGS}"
-    -DCMAKE_CXX_FLAGS="${EXTRA_CXXFLAGS} ${OPT_CFLAGS}"
+    -DCMAKE_C_FLAGS="${snappy_c_flags}"
+    -DCMAKE_CXX_FLAGS="${snappy_cxx_flags}"
     -DSNAPPY_BUILD_BENCHMARKS=OFF
     -DSNAPPY_BUILD_TESTS=OFF
     -Wno-dev

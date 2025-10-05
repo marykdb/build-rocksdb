@@ -44,6 +44,8 @@ The archives are staged under `build/archives/` during a build and can be publis
 ### Windows (MinGW) toolchain baseline
 - Continuous integration provisions [`llvm-mingw-20241030-ucrt-x86_64`](https://github.com/mstorsjo/llvm-mingw/releases/tag/20241030), the first long-lived toolchain built from LLVM 19. `./buildRocksdbMinGW.sh` and `buildDependencies.sh` automatically pick it up when `LLVM_MINGW_ROOT` points at the extracted directory.
 - Kotlin/Native still links MinGW targets with GCC 9.2's libstdc++ runtime, so the workflow also downloads the matching WinLibs sysroot to keep ABI compatibility when consuming the prebuilt archives.
+- Snappy is always built as a MinGW static archive (`libsnappy.a`) by forcing `-DBUILD_SHARED_LIBS=OFF` during CMake configuration, copying the resulting archive out of the install tree, and injecting `-DSNAPPY_STATIC` into the MinGW compile flags so the objects do not request DLL imports. 【F:buildDependencies.sh†L899-L920】【F:buildDependencies.sh†L903-L911】【F:buildDependencies.sh†L1018-L1035】
+- Earlier revisions emitted MSVC auto-import diagnostics when linking the MinGW-built archive because the headers defaulted to `__declspec(dllimport)` without `SNAPPY_STATIC`. The build now defines that macro automatically; see [docs/msvc-auto-import.md](docs/msvc-auto-import.md) for more historical context.【F:docs/msvc-auto-import.md†L1-L24】
 
 ## Usage examples
 - List available build configurations:
