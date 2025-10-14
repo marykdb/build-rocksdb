@@ -44,6 +44,7 @@ The archives are staged under `build/archives/` during a build and can be publis
 ### Windows (MinGW) toolchain baseline
 - Continuous integration provisions [`llvm-mingw-20241030-ucrt-x86_64`](https://github.com/mstorsjo/llvm-mingw/releases/tag/20241030), the first long-lived toolchain built from LLVM 19. `./buildRocksdbMinGW.sh` and `buildDependencies.sh` automatically pick it up when `LLVM_MINGW_ROOT` points at the extracted directory.
 - Kotlin/Native still links MinGW targets with GCC 9.2's libstdc++ runtime, so the workflow also downloads the matching WinLibs sysroot to keep ABI compatibility when consuming the prebuilt archives.
+- MinGW artifacts are post-processed with `objcopy` to retag `.refptr.*` COMDATs into regular `.rdata` sections. This keeps C++ v-tables reachable when Kotlin/Native's LLD-based linker consumes the archives, avoiding [KT-81420](https://youtrack.jetbrains.com/issue/KT-81420) crashes.
 
 ## Usage examples
 - List available build configurations:

@@ -245,3 +245,8 @@ build_common::cmake_configure \
   "${cmake_args[@]}"
 
 build_common::run_cmake_build "$BUILD_DIR" "$NUM_CORES"
+
+build_common::sanitize_mingw_archives_in_dir "$BUILD_DIR"
+if [[ -d "${BUILD_DIR}/rocksdb-build" ]]; then
+  build_common::sanitize_mingw_archives_in_dir "${BUILD_DIR}/rocksdb-build"
+fi

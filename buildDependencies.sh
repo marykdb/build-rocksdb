@@ -1126,3 +1126,7 @@ else
 fi
 
 echo "All dependencies have been successfully built and are located in ${OUTPUT_DIR}!"
+
+if is_mingw_build; then
+  build_common::sanitize_mingw_archives_in_dir "$OUTPUT_DIR"
+fi

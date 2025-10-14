@@ -144,6 +144,139 @@ build_common::append_unique_array_flag() {
   eval "${array_name}+=(\"\$flag\")"
 }
 
+build_common::resolve_tool() {
+  local var_name="$1"
+  shift
+
+  # shellcheck disable=SC2154
+  local current_value="${!var_name:-}"
+  if [[ -n "$current_value" ]]; then
+    printf '%s' "$current_value"
+    return 0
+  fi
+
+  local candidate
+  for candidate in "$@"; do
+    [[ -n "$candidate" ]] || continue
+    if command -v "$candidate" >/dev/null 2>&1; then
+      printf -v "$var_name" '%s' "$candidate"
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+build_common::rewrite_mingw_refptr_sections() {
+  local archive="$1"
+  if [[ -z "$archive" || ! -f "$archive" ]]; then
+    return 0
+  fi
+
+  local -a objdump_candidates=()
+  if [[ -n "${OBJDUMP:-}" ]]; then
+    objdump_candidates+=("${OBJDUMP}")
+  fi
+  if [[ -n "${CROSS_PREFIX:-}" ]]; then
+    objdump_candidates+=("${CROSS_PREFIX}objdump")
+  fi
+  if [[ -n "${MINGW_TRIPLE:-}" ]]; then
+    objdump_candidates+=("${MINGW_TRIPLE}-objdump")
+  fi
+  if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
+    objdump_candidates+=("${TOOLCHAIN_TRIPLE}-objdump")
+  fi
+  objdump_candidates+=("llvm-objdump" "objdump")
+
+  local objdump_bin
+  if ! objdump_bin="$(build_common::resolve_tool BUILD_COMMON_OBJDUMP_BIN "${objdump_candidates[@]}")"; then
+    echo "⚠️  Unable to locate objdump when preserving MinGW .refptr sections for ${archive}" >&2
+    return 0
+  fi
+
+  local -a objcopy_candidates=()
+  if [[ -n "${OBJCOPY:-}" ]]; then
+    objcopy_candidates+=("${OBJCOPY}")
+  fi
+  if [[ -n "${CROSS_PREFIX:-}" ]]; then
+    objcopy_candidates+=("${CROSS_PREFIX}objcopy")
+  fi
+  if [[ -n "${MINGW_TRIPLE:-}" ]]; then
+    objcopy_candidates+=("${MINGW_TRIPLE}-objcopy")
+  fi
+  if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
+    objcopy_candidates+=("${TOOLCHAIN_TRIPLE}-objcopy")
+  fi
+  objcopy_candidates+=("llvm-objcopy" "objcopy")
+
+  local objcopy_bin
+  if ! objcopy_bin="$(build_common::resolve_tool BUILD_COMMON_OBJCOPY_BIN "${objcopy_candidates[@]}")"; then
+    echo "⚠️  Unable to locate objcopy when preserving MinGW .refptr sections for ${archive}" >&2
+    return 0
+  fi
+
+  local -a sections=()
+  if ! mapfile -t sections < <("${objdump_bin}" -h "$archive" 2>/dev/null | awk '/\\.refptr/ {print $2}' | sort -u); then
+    return 0
+  fi
+
+  if (( ${#sections[@]} == 0 )); then
+    return 0
+  fi
+
+  local -a rename_args=(--preserve-dates)
+  local section
+  local updated=0
+  for section in "${sections[@]}"; do
+    [[ -n "$section" ]] || continue
+    local suffix="${section#.refptr}"
+    suffix="${suffix#.}"
+    local sanitized="${suffix//./_}"
+    local new_name=".rdata\$refptr"
+    if [[ -n "$sanitized" ]]; then
+      new_name+="_${sanitized}"
+    fi
+    if [[ "$section" == "$new_name" ]]; then
+      continue
+    fi
+    rename_args+=("--rename-section" "${section}=${new_name},alloc,load,readonly,data")
+    updated=1
+  done
+
+  if (( ! updated )); then
+    return 0
+  fi
+
+  if "${objcopy_bin}" "${rename_args[@]}" "$archive"; then
+    echo "ℹ️  Retagged MinGW .refptr sections in ${archive}"
+  else
+    echo "⚠️  Failed to retag MinGW .refptr sections in ${archive}" >&2
+  fi
+
+  return 0
+}
+
+build_common::sanitize_mingw_archives_in_dir() {
+  local dir="$1"
+  if [[ -z "$dir" || ! -d "$dir" ]]; then
+    return 0
+  fi
+
+  local saved_shopt
+  saved_shopt="$(shopt -p nullglob)"
+  shopt -s nullglob
+  local archive
+  for archive in "$dir"/*.a; do
+    build_common::rewrite_mingw_refptr_sections "$archive"
+  done
+  if [[ -n "$saved_shopt" ]]; then
+    eval "$saved_shopt"
+  else
+    shopt -u nullglob
+  fi
+}
+
 build_common::read_cmake_version() {
   if [[ -n "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE:-}" ]]; then
     [[ "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE}" == "1" ]]
