@@ -40,7 +40,11 @@ fi
 case "$ARCH" in
   x86_64)
     TOOLCHAIN_TRIPLE="x86_64-w64-mingw32"
-    if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+    prefer_llvm_mingw=${USE_LLVM_MINGW:-0}
+    # Prefer the GNU MinGW toolchain unless explicitly overridden to avoid
+    # https://youtrack.jetbrains.com/issue/KT-81420 (`lld` drops `.refptr` COMDATs
+    # required by some C++ libraries when producing Kotlin/Native binaries).
+    if (( prefer_llvm_mingw )) && command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
       CC="${TOOLCHAIN_TRIPLE}-clang"
       if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
         CXX="${TOOLCHAIN_TRIPLE}-clang++"
@@ -48,8 +52,20 @@ case "$ARCH" in
         CXX="${TOOLCHAIN_TRIPLE}-clang"
       fi
     else
-      CC="${TOOLCHAIN_TRIPLE}-gcc"
-      CXX="${TOOLCHAIN_TRIPLE}-g++"
+      if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+        CC="${TOOLCHAIN_TRIPLE}-gcc"
+        CXX="${TOOLCHAIN_TRIPLE}-g++"
+      elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+        CC="${TOOLCHAIN_TRIPLE}-clang"
+        if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+          CXX="${TOOLCHAIN_TRIPLE}-clang++"
+        else
+          CXX="${TOOLCHAIN_TRIPLE}-clang"
+        fi
+      else
+        echo "No usable compiler found for ${TOOLCHAIN_TRIPLE}" >&2
+        exit 1
+      fi
     fi
     cmake_toolchain_flags=(
       "-DCMAKE_SYSTEM_NAME=Windows"
@@ -61,7 +77,9 @@ case "$ARCH" in
     ;;
   i686)
     TOOLCHAIN_TRIPLE="i686-w64-mingw32"
-    if command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+    prefer_llvm_mingw=${USE_LLVM_MINGW:-0}
+    # Mirror the x86_64 logic so GNU MinGW remains the default pending KT-81420.
+    if (( prefer_llvm_mingw )) && command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
       CC="${TOOLCHAIN_TRIPLE}-clang"
       if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
         CXX="${TOOLCHAIN_TRIPLE}-clang++"
@@ -69,8 +87,20 @@ case "$ARCH" in
         CXX="${TOOLCHAIN_TRIPLE}-clang"
       fi
     else
-      CC="${TOOLCHAIN_TRIPLE}-gcc"
-      CXX="${TOOLCHAIN_TRIPLE}-g++"
+      if command -v "${TOOLCHAIN_TRIPLE}-gcc" >/dev/null 2>&1; then
+        CC="${TOOLCHAIN_TRIPLE}-gcc"
+        CXX="${TOOLCHAIN_TRIPLE}-g++"
+      elif command -v "${TOOLCHAIN_TRIPLE}-clang" >/dev/null 2>&1; then
+        CC="${TOOLCHAIN_TRIPLE}-clang"
+        if command -v "${TOOLCHAIN_TRIPLE}-clang++" >/dev/null 2>&1; then
+          CXX="${TOOLCHAIN_TRIPLE}-clang++"
+        else
+          CXX="${TOOLCHAIN_TRIPLE}-clang"
+        fi
+      else
+        echo "No usable compiler found for ${TOOLCHAIN_TRIPLE}" >&2
+        exit 1
+      fi
     fi
     cmake_toolchain_flags=(
       "-DCMAKE_SYSTEM_NAME=Windows"
