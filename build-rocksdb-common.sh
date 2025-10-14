@@ -144,6 +144,153 @@ build_common::append_unique_array_flag() {
   eval "${array_name}+=(\"\$flag\")"
 }
 
+build_common::find_tool() {
+  if (( $# == 0 )); then
+    return 1
+  fi
+
+  local candidate
+  for candidate in "$@"; do
+    if [[ -z "$candidate" ]]; then
+      continue
+    fi
+    if command -v "$candidate" >/dev/null 2>&1; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+build_common::mitigate_mingw_refptr_comdats() {
+  local archive="$1"
+  local preferred_triple="${2:-}"
+
+  if [[ -z "$archive" || ! -f "$archive" ]]; then
+    return 0
+  fi
+
+  local -a objdump_candidates=()
+  local -a objcopy_candidates=()
+  local -a ar_candidates=()
+  local -a ranlib_candidates=()
+
+  if [[ -n "$preferred_triple" ]]; then
+    objdump_candidates+=("${preferred_triple}-objdump")
+    objcopy_candidates+=("${preferred_triple}-objcopy")
+    ar_candidates+=("${preferred_triple}-ar")
+    ranlib_candidates+=("${preferred_triple}-ranlib")
+  fi
+
+  local mingw_triple="${MINGW_TRIPLE:-}"
+  if [[ -n "$mingw_triple" && "$mingw_triple" != "$preferred_triple" ]]; then
+    objdump_candidates+=("${mingw_triple}-objdump")
+    objcopy_candidates+=("${mingw_triple}-objcopy")
+    ar_candidates+=("${mingw_triple}-ar")
+    ranlib_candidates+=("${mingw_triple}-ranlib")
+  fi
+
+  objdump_candidates+=(llvm-objdump objdump)
+  objcopy_candidates+=(llvm-objcopy objcopy)
+  ar_candidates+=(llvm-ar ar)
+  ranlib_candidates+=(llvm-ranlib ranlib)
+
+  local objdump_bin=""
+  local objcopy_bin=""
+  local ar_bin=""
+  local ranlib_bin=""
+
+  if ! objdump_bin="$(build_common::find_tool "${objdump_candidates[@]}")"; then
+    objdump_bin=""
+  fi
+  if ! objcopy_bin="$(build_common::find_tool "${objcopy_candidates[@]}")"; then
+    objcopy_bin=""
+  fi
+  if ! ar_bin="$(build_common::find_tool "${ar_candidates[@]}")"; then
+    ar_bin=""
+  fi
+  if ! ranlib_bin="$(build_common::find_tool "${ranlib_candidates[@]}")"; then
+    ranlib_bin=""
+  fi
+
+  if [[ -z "$objdump_bin" || -z "$objcopy_bin" || -z "$ar_bin" ]]; then
+    echo "⚠️  Skipping .refptr COMDAT mitigation for ${archive}: required binutils not found" >&2
+    return 0
+  fi
+
+  local archive_dir archive_base archive_abs
+  archive_dir="$(cd "$(dirname "$archive")" 2>/dev/null && pwd 2>/dev/null)"
+  archive_base="$(basename "$archive")"
+  if [[ -z "$archive_dir" ]]; then
+    archive_abs="$archive"
+  else
+    archive_abs="${archive_dir}/${archive_base}"
+  fi
+
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || true)"
+  if [[ -z "$tmpdir" ]]; then
+    echo "⚠️  Unable to create temporary directory to patch ${archive}" >&2
+    return 1
+  fi
+
+  local cleanup
+  cleanup() {
+    rm -rf "$tmpdir"
+  }
+
+  local -a members=()
+  if ! mapfile -t members < <("$ar_bin" t "$archive_abs" 2>/dev/null); then
+    cleanup
+    return 1
+  fi
+
+  if (( ${#members[@]} == 0 )); then
+    cleanup
+    return 0
+  fi
+
+  (
+    set -euo pipefail
+    cd "$tmpdir"
+    "$ar_bin" x "$archive_abs"
+
+    local member
+    local -a sections
+    local modified=0
+
+    for member in "${members[@]}"; do
+      if [[ ! -f "$member" ]]; then
+        continue
+      fi
+      mapfile -t sections < <("$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.rdata\\$.refptr/ {print $2}' ) || sections=()
+      if (( ${#sections[@]} == 0 )); then
+        continue
+      fi
+      modified=1
+      local section
+      for section in "${sections[@]}"; do
+        "$objcopy_bin" --set-section-flags "$section"=alloc,load,readonly,data "$member" >/dev/null 2>&1 || true
+      done
+    done
+
+    if (( modified )); then
+      local new_archive="${archive_abs}.tmp"
+      rm -f "$new_archive"
+      "$ar_bin" qc "$new_archive" "${members[@]}"
+      if [[ -n "$ranlib_bin" ]]; then
+        "$ranlib_bin" "$new_archive" >/dev/null 2>&1 || true
+      fi
+      mv "$new_archive" "$archive_abs"
+    fi
+  )
+
+  local status=$?
+  cleanup
+  return $status
+}
+
 build_common::read_cmake_version() {
   if [[ -n "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE:-}" ]]; then
     [[ "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE}" == "1" ]]

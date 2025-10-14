@@ -245,3 +245,11 @@ build_common::cmake_configure \
   "${cmake_args[@]}"
 
 build_common::run_cmake_build "$BUILD_DIR" "$NUM_CORES"
+
+if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
+  build_common::mitigate_mingw_refptr_comdats "${BUILD_DIR}/librocksdb.a" "${TOOLCHAIN_TRIPLE}"
+  build_common::mitigate_mingw_refptr_comdats "${BUILD_DIR}/rocksdb-build/librocksdb.a" "${TOOLCHAIN_TRIPLE}"
+else
+  build_common::mitigate_mingw_refptr_comdats "${BUILD_DIR}/librocksdb.a"
+  build_common::mitigate_mingw_refptr_comdats "${BUILD_DIR}/rocksdb-build/librocksdb.a"
+fi

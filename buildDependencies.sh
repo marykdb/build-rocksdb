@@ -1125,4 +1125,12 @@ else
   build_lz4
 fi
 
+if is_mingw_build; then
+  echo "Ensuring MinGW C++ archives retain .refptr COMDAT sections"
+  refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
+  for mingw_lib in libsnappy.a libzstd.a liblz4.a libbz2.a libz.a; do
+    build_common::mitigate_mingw_refptr_comdats "${OUTPUT_DIR}/${mingw_lib}" "$refptr_triple"
+  done
+fi
+
 echo "All dependencies have been successfully built and are located in ${OUTPUT_DIR}!"
