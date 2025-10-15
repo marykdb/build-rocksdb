@@ -163,6 +163,40 @@ build_common::find_tool() {
   return 1
 }
 
+build_common::mingw_binutils_candidates() {
+  local preferred_triple="${1:-}"
+
+  local -n _objdump_candidates_ref="$2"
+  local -n _objcopy_candidates_ref="$3"
+  local -n _ar_candidates_ref="$4"
+  local -n _ranlib_candidates_ref="$5"
+
+  _objdump_candidates_ref=()
+  _objcopy_candidates_ref=()
+  _ar_candidates_ref=()
+  _ranlib_candidates_ref=()
+
+  if [[ -n "$preferred_triple" ]]; then
+    _objdump_candidates_ref+=("${preferred_triple}-objdump")
+    _objcopy_candidates_ref+=("${preferred_triple}-objcopy")
+    _ar_candidates_ref+=("${preferred_triple}-ar")
+    _ranlib_candidates_ref+=("${preferred_triple}-ranlib")
+  fi
+
+  local mingw_triple="${MINGW_TRIPLE:-}"
+  if [[ -n "$mingw_triple" && "$mingw_triple" != "$preferred_triple" ]]; then
+    _objdump_candidates_ref+=("${mingw_triple}-objdump")
+    _objcopy_candidates_ref+=("${mingw_triple}-objcopy")
+    _ar_candidates_ref+=("${mingw_triple}-ar")
+    _ranlib_candidates_ref+=("${mingw_triple}-ranlib")
+  fi
+
+  _objdump_candidates_ref+=(llvm-objdump objdump)
+  _objcopy_candidates_ref+=(llvm-objcopy objcopy)
+  _ar_candidates_ref+=(llvm-ar ar)
+  _ranlib_candidates_ref+=(llvm-ranlib ranlib)
+}
+
 build_common::mitigate_mingw_refptr_comdats() {
   local archive="$1"
   local preferred_triple="${2:-}"
@@ -175,26 +209,7 @@ build_common::mitigate_mingw_refptr_comdats() {
   local -a objcopy_candidates=()
   local -a ar_candidates=()
   local -a ranlib_candidates=()
-
-  if [[ -n "$preferred_triple" ]]; then
-    objdump_candidates+=("${preferred_triple}-objdump")
-    objcopy_candidates+=("${preferred_triple}-objcopy")
-    ar_candidates+=("${preferred_triple}-ar")
-    ranlib_candidates+=("${preferred_triple}-ranlib")
-  fi
-
-  local mingw_triple="${MINGW_TRIPLE:-}"
-  if [[ -n "$mingw_triple" && "$mingw_triple" != "$preferred_triple" ]]; then
-    objdump_candidates+=("${mingw_triple}-objdump")
-    objcopy_candidates+=("${mingw_triple}-objcopy")
-    ar_candidates+=("${mingw_triple}-ar")
-    ranlib_candidates+=("${mingw_triple}-ranlib")
-  fi
-
-  objdump_candidates+=(llvm-objdump objdump)
-  objcopy_candidates+=(llvm-objcopy objcopy)
-  ar_candidates+=(llvm-ar ar)
-  ranlib_candidates+=(llvm-ranlib ranlib)
+  build_common::mingw_binutils_candidates "$preferred_triple" objdump_candidates objcopy_candidates ar_candidates ranlib_candidates
 
   local objdump_bin=""
   local objcopy_bin=""
@@ -271,7 +286,10 @@ build_common::mitigate_mingw_refptr_comdats() {
       modified=1
       local section
       for section in "${sections[@]}"; do
-        "$objcopy_bin" --set-section-flags "$section"=alloc,load,readonly,data "$member" >/dev/null 2>&1 || true
+        local suffix
+        suffix="${section#.rdata\$.refptr.}"
+        local new_name=".rdata\$refptr_${suffix}"
+        "$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member" >/dev/null 2>&1 || true
       done
     done
 
@@ -289,6 +307,35 @@ build_common::mitigate_mingw_refptr_comdats() {
   local status=$?
   cleanup
   return $status
+}
+
+build_common::verify_mingw_refptr_sections_rewritten() {
+  local archive="$1"
+  local preferred_triple="${2:-}"
+
+  if [[ -z "$archive" || ! -f "$archive" ]]; then
+    return 0
+  fi
+
+  local -a objdump_candidates=()
+  local -a dummy=()
+  build_common::mingw_binutils_candidates "$preferred_triple" objdump_candidates dummy dummy dummy
+
+  local objdump_bin=""
+  if ! objdump_bin="$(build_common::find_tool "${objdump_candidates[@]}")"; then
+    echo "⚠️  Unable to locate objdump to validate ${archive}" >&2
+    return 0
+  fi
+
+  local remaining
+  remaining="$("$objdump_bin" -h "$archive" 2>/dev/null | awk '/\\.rdata\\$.refptr/ {print}' || true)"
+  if [[ -n "$remaining" ]]; then
+    echo "❌ MinGW refptr COMDATs remain in ${archive}:" >&2
+    echo "$remaining" >&2
+    return 1
+  fi
+
+  return 0
 }
 
 build_common::read_cmake_version() {

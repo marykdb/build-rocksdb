@@ -1130,6 +1130,7 @@ if is_mingw_build; then
   refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
   for mingw_lib in libsnappy.a libzstd.a liblz4.a libbz2.a libz.a; do
     build_common::mitigate_mingw_refptr_comdats "${OUTPUT_DIR}/${mingw_lib}" "$refptr_triple"
+    build_common::verify_mingw_refptr_sections_rewritten "${OUTPUT_DIR}/${mingw_lib}" "$refptr_triple"
   done
 fi
 

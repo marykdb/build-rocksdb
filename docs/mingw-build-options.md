@@ -4,8 +4,8 @@ This project now hardens the Windows/MinGW build so that static archives keep th
 `.refptr` COMDAT sections that C++ libraries (such as Snappy) rely on to preserve
 v-table pointers. Kotlin/Native's LLVM-based linker previously discarded those
 COMDATs, rewriting RIP-relative loads to point at zero and crashing executables
-at runtime. The mitigation rewrites MinGW object files after they are built so
-the `.refptr` sections are marked as ordinary read-only data. That prevents the
+at runtime. The mitigation now renames every `.rdata$.refptr.*` section to
+`.rdata$refptr_*` and marks it as ordinary read-only data. That prevents the
 linker from garbage-collecting them and fixes the crash described in
 [KT-81420](https://youtrack.jetbrains.com/issue/KT-81420).
 
@@ -26,9 +26,10 @@ You can safely produce working MinGW artefacts in any of the following ways:
    neutralise `.refptr` COMDATs.
 3. **Dependency-only refresh** – If you are updating Snappy/Zstd/LZ4/BZip2/Zlib
    independently, invoke `./buildDependencies.sh --output-dir build/lib/mingw_x86_64`
-   (or `mingw_arm64`). The script now scans each produced archive and rewrites
-   any `.rdata$.refptr.*` sections, ensuring the resulting dependencies are safe
-   to link into Kotlin/Native binaries.
+   (or `mingw_arm64`). The script now scans each produced archive, rewrites any
+   `.rdata$.refptr.*` sections, and refuses to continue if validation detects a
+   lingering COMDAT. The resulting dependencies are safe to link into
+   Kotlin/Native binaries.
 
 In every workflow the fix runs automatically; no manual flags are necessary as
 long as the relevant binutils (`objdump`, `objcopy`, and `ar`) are on `PATH`
@@ -36,11 +37,12 @@ long as the relevant binutils (`objdump`, `objcopy`, and `ar`) are on `PATH`
 
 ## Manual verification tips
 
-If you want to double-check a library, use:
+If you want to double-check a library manually, use:
 
 ```bash
 objdump -h build/lib/mingw_x86_64/libsnappy.a | grep '\.refptr'
 ```
 
-The sections should appear without the `LINK_ONCE_*` annotation after the build,
-confirming the mitigation succeeded.
+The sections should now be named `.rdata$refptr_*`. The automated validation
+step in the build scripts performs the same check and fails early if any
+`.rdata$.refptr.*` symbols remain.
