@@ -197,9 +197,25 @@ build_common::mingw_binutils_candidates() {
   _ranlib_candidates_ref+=(llvm-ranlib ranlib)
 }
 
+build_common::is_mingw_triple() {
+  local triple="${1:-}"
+  if [[ -z "$triple" ]]; then
+    return 1
+  fi
+
+  case "$triple" in
+    *-w64-mingw32*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 build_common::mitigate_mingw_refptr_comdats() {
   local archive="$1"
   local preferred_triple="${2:-}"
+
+  if [[ -n "$preferred_triple" ]] && ! build_common::is_mingw_triple "$preferred_triple"; then
+    return 0
+  fi
 
   if [[ -z "$archive" || ! -f "$archive" ]]; then
     return 0
@@ -313,6 +329,10 @@ build_common::verify_mingw_refptr_sections_rewritten() {
   local archive="$1"
   local preferred_triple="${2:-}"
 
+  if [[ -n "$preferred_triple" ]] && ! build_common::is_mingw_triple "$preferred_triple"; then
+    return 0
+  fi
+
   if [[ -z "$archive" || ! -f "$archive" ]]; then
     return 0
   fi
@@ -341,6 +361,10 @@ build_common::verify_mingw_refptr_sections_rewritten() {
 build_common::sanitize_mingw_archives_in_tree() {
   local root_dir="$1"
   local preferred_triple="${2:-}"
+
+  if [[ -n "$preferred_triple" ]] && ! build_common::is_mingw_triple "$preferred_triple"; then
+    return 0
+  fi
 
   if [[ -z "$root_dir" || ! -d "$root_dir" ]]; then
     return 0
