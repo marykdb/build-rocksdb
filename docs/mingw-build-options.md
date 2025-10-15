@@ -56,7 +56,9 @@ clean.
 
 For automated validation you can also call the helper script, which reuses the
 same verification logic as the build and fails if any legacy COMDAT sections
-are detected:
+are detected. The helper now also reports a failure when the requested
+directory does not exist or no static libraries are present, making it obvious
+when the MinGW build did not produce the expected artefacts:
 
 ```bash
 ./scripts/verify-mingw-refptr.sh build/lib/mingw_x86_64 x86_64-w64-mingw32

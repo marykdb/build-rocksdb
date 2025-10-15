@@ -348,8 +348,23 @@ build_common::verify_mingw_refptr_sections_rewritten() {
     return 0
   fi
 
-  if [[ -z "$archive" || ! -f "$archive" ]]; then
-    return 0
+  if [[ -z "$archive" ]]; then
+    echo "❌ MinGW archive path was not provided" >&2
+    return 1
+  fi
+
+  local archive_dir archive_base archive_abs
+  archive_dir="$(cd "$(dirname "$archive")" 2>/dev/null && pwd 2>/dev/null)"
+  archive_base="$(basename "$archive")"
+  if [[ -z "$archive_dir" ]]; then
+    archive_abs="$archive"
+  else
+    archive_abs="${archive_dir}/${archive_base}"
+  fi
+
+  if [[ ! -f "$archive_abs" ]]; then
+    echo "❌ Expected MinGW archive ${archive} but it was not found" >&2
+    return 1
   fi
 
   local -a objdump_candidates=()
@@ -388,21 +403,21 @@ build_common::verify_mingw_refptr_sections_rewritten() {
   (
     set -euo pipefail
     cd "$tmpdir"
-    "$ar_bin" x "$archive"
+    "$ar_bin" x "$archive_abs"
     local member
     for member in *; do
       [[ -e "$member" ]] || continue
       if "$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.refptr/ {exit 1}'; then
         continue
       fi
-      echo "❌ MinGW refptr COMDATs remain in ${archive} (member ${member})" >&2
+      echo "❌ MinGW refptr COMDATs remain in ${archive_abs} (member ${member})" >&2
       exit 1
     done
   ) || status=$?
 
   cleanup
   if (( status == 0 )); then
-    echo "🧪 [MinGW] verification passed for ${archive}" >&2
+    echo "🧪 [MinGW] verification passed for ${archive_abs}" >&2
   fi
   return $status
 }
@@ -453,8 +468,14 @@ build_common::assert_mingw_archives_sanitized() {
     return 0
   fi
 
-  if [[ -z "$root_dir" || ! -d "$root_dir" ]]; then
-    return 0
+  if [[ -z "$root_dir" ]]; then
+    echo "❌ MinGW archive directory was not provided" >&2
+    return 1
+  fi
+
+  if [[ ! -d "$root_dir" ]]; then
+    echo "❌ Expected MinGW archive directory ${root_dir} but it was not found" >&2
+    return 1
   fi
 
   echo "🧪 [MinGW] validating sanitized archives under ${root_dir}" >&2
@@ -462,6 +483,11 @@ build_common::assert_mingw_archives_sanitized() {
   local -a archives=()
   if ! mapfile -t -d '' archives < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null); then
     archives=()
+  fi
+
+  if (( ${#archives[@]} == 0 )); then
+    echo "❌ No static libraries were discovered under ${root_dir}" >&2
+    return 1
   fi
 
   local archive
