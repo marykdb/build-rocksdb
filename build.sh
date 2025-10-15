@@ -558,7 +558,7 @@ package_artifacts() {
   fi
 
   if config_is_mingw "$config"; then
-    build_common::sanitize_mingw_archives_in_tree "$lib_base" "$(config_mingw_triple "$config")"
+    build_common::assert_mingw_archives_sanitized "$lib_base" "$(config_mingw_triple "$config")"
   fi
 
   local staging

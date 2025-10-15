@@ -281,6 +281,8 @@ jobs:
             echo "Error: Detected libc++ symbols (std::__1) in librocksdb.a. Expected libstdc++." >&2
             exit 1
           fi
+      - name: Check MinGW refptr rewrites
+        run: ./scripts/verify-mingw-refptr.sh build/lib/mingw_x86_64 x86_64-w64-mingw32
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-mingw-x86_64

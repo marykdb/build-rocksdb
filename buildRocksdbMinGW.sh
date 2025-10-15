@@ -246,4 +246,5 @@ build_common::cmake_configure \
 
 build_common::run_cmake_build "$BUILD_DIR" "$NUM_CORES"
 
-build_common::sanitize_mingw_archives_in_tree "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}" 
+build_common::sanitize_mingw_archives_in_tree "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}"
+build_common::assert_mingw_archives_sanitized "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}"

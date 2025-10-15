@@ -53,3 +53,11 @@ steps in the build scripts perform the same check and fail early if any
 `build/lib/mingw_*` or to the unpacked contents of
 `build/archives/rocksdb-mingw-*.zip` to confirm the delivered artefacts are
 clean.
+
+For automated validation you can also call the helper script, which reuses the
+same verification logic as the build and fails if any legacy COMDAT sections
+are detected:
+
+```bash
+./scripts/verify-mingw-refptr.sh build/lib/mingw_x86_64 x86_64-w64-mingw32
+```

@@ -290,22 +290,36 @@ build_common::mitigate_mingw_refptr_comdats() {
     local member
     local -a sections
     local modified=0
+    local renamed_sections=0
+    local logged=0
 
     for member in "${members[@]}"; do
       if [[ ! -f "$member" ]]; then
         continue
       fi
-      mapfile -t sections < <("$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.rdata\\$.refptr/ {print $2}' ) || sections=()
+      mapfile -t sections < <("$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.refptr/ {print $2}' ) || sections=()
       if (( ${#sections[@]} == 0 )); then
         continue
       fi
       modified=1
+      if (( ! logged )); then
+        echo "🔧 [MinGW] rewriting refptr COMDATs in ${archive_abs}" >&2
+        logged=1
+      fi
       local section
       for section in "${sections[@]}"; do
-        local suffix
-        suffix="${section#.rdata\$.refptr.}"
-        local new_name=".rdata\$refptr_${suffix}"
-        "$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member" >/dev/null 2>&1
+        local new_name
+        new_name="$section"
+        new_name="${new_name/.rdata\$.refptr\./.rdata\$refptr_}"
+        if [[ "$new_name" == "$section" ]]; then
+          new_name="${new_name/.rdata\$.refptr/.rdata\$refptr_}"
+        fi
+        if [[ "$new_name" == "$section" ]]; then
+          echo "❌ Unable to compute sanitized name for section ${section} in ${member}" >&2
+          exit 1
+        fi
+        "$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member"
+        ((renamed_sections++))
       done
     done
 
@@ -317,6 +331,7 @@ build_common::mitigate_mingw_refptr_comdats() {
         "$ranlib_bin" "$new_archive" >/dev/null 2>&1 || true
       fi
       mv "$new_archive" "$archive_abs"
+      echo "✅ [MinGW] sanitized ${archive_abs} (${renamed_sections} sections updated)" >&2
     fi
   )
 
@@ -347,15 +362,49 @@ build_common::verify_mingw_refptr_sections_rewritten() {
     return 1
   fi
 
-  local remaining
-  remaining="$("$objdump_bin" -h "$archive" 2>/dev/null | awk '/\\.rdata\\$.refptr/ {print}' || true)"
-  if [[ -n "$remaining" ]]; then
-    echo "❌ MinGW refptr COMDATs remain in ${archive}:" >&2
-    echo "$remaining" >&2
+  local -a ar_candidates=()
+  local -a dummy=()
+  build_common::mingw_binutils_candidates "$preferred_triple" dummy dummy ar_candidates dummy
+
+  local ar_bin=""
+  if ! ar_bin="$(build_common::find_tool "${ar_candidates[@]}")"; then
+    echo "❌ Unable to locate ar to inspect ${archive}" >&2
     return 1
   fi
 
-  return 0
+  local tmpdir
+  tmpdir="$(mktemp -d 2>/dev/null || true)"
+  if [[ -z "$tmpdir" ]]; then
+    echo "❌ Unable to create temporary directory to verify ${archive}" >&2
+    return 1
+  fi
+
+  local cleanup
+  cleanup() {
+    rm -rf "$tmpdir"
+  }
+
+  local status=0
+  (
+    set -euo pipefail
+    cd "$tmpdir"
+    "$ar_bin" x "$archive"
+    local member
+    for member in *; do
+      [[ -e "$member" ]] || continue
+      if "$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.refptr/ {exit 1}'; then
+        continue
+      fi
+      echo "❌ MinGW refptr COMDATs remain in ${archive} (member ${member})" >&2
+      exit 1
+    done
+  ) || status=$?
+
+  cleanup
+  if (( status == 0 )); then
+    echo "🧪 [MinGW] verification passed for ${archive}" >&2
+  fi
+  return $status
 }
 
 build_common::sanitize_mingw_archives_in_tree() {
@@ -369,6 +418,8 @@ build_common::sanitize_mingw_archives_in_tree() {
   if [[ -z "$root_dir" || ! -d "$root_dir" ]]; then
     return 0
   fi
+
+  echo "🔍 [MinGW] scanning ${root_dir} for static archives" >&2
 
   local -a archives=()
   if ! mapfile -t -d '' archives < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null); then
@@ -392,6 +443,35 @@ build_common::sanitize_mingw_archives_in_tree() {
   done
 
   return $overall_status
+}
+
+build_common::assert_mingw_archives_sanitized() {
+  local root_dir="$1"
+  local preferred_triple="${2:-}"
+
+  if [[ -n "$preferred_triple" ]] && ! build_common::is_mingw_triple "$preferred_triple"; then
+    return 0
+  fi
+
+  if [[ -z "$root_dir" || ! -d "$root_dir" ]]; then
+    return 0
+  fi
+
+  echo "🧪 [MinGW] validating sanitized archives under ${root_dir}" >&2
+
+  local -a archives=()
+  if ! mapfile -t -d '' archives < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null); then
+    archives=()
+  fi
+
+  local archive
+  for archive in "${archives[@]}"; do
+    if ! build_common::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
+      return 1
+    fi
+  done
+
+  return 0
 }
 
 build_common::read_cmake_version() {

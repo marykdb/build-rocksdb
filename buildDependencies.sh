@@ -1129,6 +1129,7 @@ if is_mingw_build; then
   echo "Sanitizing MinGW archives under ${OUTPUT_DIR}"
   refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
   build_common::sanitize_mingw_archives_in_tree "${OUTPUT_DIR}" "$refptr_triple"
+  build_common::assert_mingw_archives_sanitized "${OUTPUT_DIR}" "$refptr_triple"
 fi
 
 echo "All dependencies have been successfully built and are located in ${OUTPUT_DIR}!"
