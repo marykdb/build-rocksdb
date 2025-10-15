@@ -246,8 +246,8 @@ build_common::mitigate_mingw_refptr_comdats() {
   fi
 
   if [[ -z "$objdump_bin" || -z "$objcopy_bin" || -z "$ar_bin" ]]; then
-    echo "⚠️  Skipping .refptr COMDAT mitigation for ${archive}: required binutils not found" >&2
-    return 0
+    echo "❌ Unable to sanitize MinGW archive ${archive}: required binutils not found" >&2
+    return 1
   fi
 
   local archive_dir archive_base archive_abs
@@ -305,7 +305,7 @@ build_common::mitigate_mingw_refptr_comdats() {
         local suffix
         suffix="${section#.rdata\$.refptr.}"
         local new_name=".rdata\$refptr_${suffix}"
-        "$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member" >/dev/null 2>&1 || true
+        "$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member" >/dev/null 2>&1
       done
     done
 
@@ -343,8 +343,8 @@ build_common::verify_mingw_refptr_sections_rewritten() {
 
   local objdump_bin=""
   if ! objdump_bin="$(build_common::find_tool "${objdump_candidates[@]}")"; then
-    echo "⚠️  Unable to locate objdump to validate ${archive}" >&2
-    return 0
+    echo "❌ Unable to locate objdump to validate ${archive}" >&2
+    return 1
   fi
 
   local remaining
@@ -380,12 +380,18 @@ build_common::sanitize_mingw_archives_in_tree() {
   fi
 
   local archive
+  local overall_status=0
   for archive in "${archives[@]}"; do
-    build_common::mitigate_mingw_refptr_comdats "$archive" "$preferred_triple"
-    build_common::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"
+    if ! build_common::mitigate_mingw_refptr_comdats "$archive" "$preferred_triple"; then
+      overall_status=1
+      continue
+    fi
+    if ! build_common::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
+      overall_status=1
+    fi
   done
 
-  return 0
+  return $overall_status
 }
 
 build_common::read_cmake_version() {
