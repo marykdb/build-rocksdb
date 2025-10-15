@@ -338,6 +338,32 @@ build_common::verify_mingw_refptr_sections_rewritten() {
   return 0
 }
 
+build_common::sanitize_mingw_archives_in_tree() {
+  local root_dir="$1"
+  local preferred_triple="${2:-}"
+
+  if [[ -z "$root_dir" || ! -d "$root_dir" ]]; then
+    return 0
+  fi
+
+  local -a archives=()
+  if ! mapfile -t -d '' archives < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null); then
+    archives=()
+  fi
+
+  if (( ${#archives[@]} == 0 )); then
+    return 0
+  fi
+
+  local archive
+  for archive in "${archives[@]}"; do
+    build_common::mitigate_mingw_refptr_comdats "$archive" "$preferred_triple"
+    build_common::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"
+  done
+
+  return 0
+}
+
 build_common::read_cmake_version() {
   if [[ -n "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE:-}" ]]; then
     [[ "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE}" == "1" ]]

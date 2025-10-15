@@ -17,8 +17,10 @@ You can safely produce working MinGW artefacts in any of the following ways:
    `--konan-version` and/or explicit target names). The script provisions the
    toolchain, invokes `buildDependencies.sh`, and then calls
    `buildRocksdbMinGW.sh`. The mitigation automatically post-processes every
-   MinGW archive that the orchestrator produces, so the resulting ZIP archives
-   keep their `.refptr` data intact.
+   MinGW archive that the orchestrator produces, and the packaging step now
+   re-sanitises and validates the library directory immediately before the ZIP
+   is created. The resulting `rocksdb-mingw-*.zip` archives keep their `.refptr`
+   data intact.
 2. **Direct RocksDB rebuild** – When you only need to refresh the RocksDB static
    library, run `./buildRocksdbMinGW.sh --arch=x86_64` or `--arch=arm64`. The
    script drives a dedicated CMake build directory and now post-processes the
@@ -29,7 +31,9 @@ You can safely produce working MinGW artefacts in any of the following ways:
    (or `mingw_arm64`). The script now scans each produced archive, rewrites any
    `.rdata$.refptr.*` sections, and refuses to continue if validation detects a
    lingering COMDAT. The resulting dependencies are safe to link into
-   Kotlin/Native binaries.
+   Kotlin/Native binaries. Should you subsequently package those outputs
+   manually, rerunning the sanitiser on the destination directory is
+   recommended (the helper is idempotent).
 
 In every workflow the fix runs automatically; no manual flags are necessary as
 long as the relevant binutils (`objdump`, `objcopy`, and `ar`) are on `PATH`
@@ -44,5 +48,8 @@ objdump -h build/lib/mingw_x86_64/libsnappy.a | grep '\.refptr'
 ```
 
 The sections should now be named `.rdata$refptr_*`. The automated validation
-step in the build scripts performs the same check and fails early if any
-`.rdata$.refptr.*` symbols remain.
+steps in the build scripts perform the same check and fail early if any
+`.rdata$.refptr.*` symbols remain. You can apply the same command to archives in
+`build/lib/mingw_*` or to the unpacked contents of
+`build/archives/rocksdb-mingw-*.zip` to confirm the delivered artefacts are
+clean.

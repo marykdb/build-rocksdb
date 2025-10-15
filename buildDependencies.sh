@@ -1126,12 +1126,9 @@ else
 fi
 
 if is_mingw_build; then
-  echo "Ensuring MinGW C++ archives retain .refptr COMDAT sections"
+  echo "Sanitizing MinGW archives under ${OUTPUT_DIR}"
   refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
-  for mingw_lib in libsnappy.a libzstd.a liblz4.a libbz2.a libz.a; do
-    build_common::mitigate_mingw_refptr_comdats "${OUTPUT_DIR}/${mingw_lib}" "$refptr_triple"
-    build_common::verify_mingw_refptr_sections_rewritten "${OUTPUT_DIR}/${mingw_lib}" "$refptr_triple"
-  done
+  build_common::sanitize_mingw_archives_in_tree "${OUTPUT_DIR}" "$refptr_triple"
 fi
 
 echo "All dependencies have been successfully built and are located in ${OUTPUT_DIR}!"
