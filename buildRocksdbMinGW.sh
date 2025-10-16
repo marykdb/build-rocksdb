@@ -29,6 +29,11 @@ fi
 WINDOWS_MIN_VERSION_C_FLAGS="-U_WIN32_WINNT -DWINVER=0x0A00 -D_WIN32_WINNT=0x0A00 -pthread -include stdint.h"
 WINDOWS_MIN_VERSION_CXX_FLAGS="${WINDOWS_MIN_VERSION_C_FLAGS} -include system_error"
 
+build_common::append_unique_flag WINDOWS_MIN_VERSION_C_FLAGS "-DROCKSDB_DLL"
+build_common::append_unique_flag WINDOWS_MIN_VERSION_C_FLAGS "-DROCKSDB_LIBRARY_EXPORTS"
+build_common::append_unique_flag WINDOWS_MIN_VERSION_CXX_FLAGS "-DROCKSDB_DLL"
+build_common::append_unique_flag WINDOWS_MIN_VERSION_CXX_FLAGS "-DROCKSDB_LIBRARY_EXPORTS"
+
 MINGW_LINK_FLAGS=""
 
 declare -a cmake_toolchain_flags=()
