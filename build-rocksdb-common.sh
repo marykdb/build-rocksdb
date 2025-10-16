@@ -163,6 +163,53 @@ build_common::find_tool() {
   return 1
 }
 
+build_common::coff_replace_section_name() {
+  local object_file="$1"
+  local old_name="$2"
+  local new_name="$3"
+
+  if [[ -z "$object_file" || -z "$old_name" || -z "$new_name" ]]; then
+    return 1
+  fi
+
+  local python_bin=""
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin="python3"
+  elif command -v python >/dev/null 2>&1; then
+    python_bin="python"
+  else
+    echo "❌ Unable to locate python interpreter to rewrite COFF section names" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$object_file" "$old_name" "$new_name" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+old = sys.argv[2].encode('ascii')
+new = sys.argv[3].encode('ascii')
+
+needle = old + b'\x00'
+if len(new) > len(old):
+    sys.stderr.write("replacement name longer than original\n")
+    sys.exit(1)
+
+data = path.read_bytes()
+count = data.count(needle)
+if count == 0:
+    sys.stderr.write("section name not found in object\n")
+    sys.exit(1)
+
+replacement = new + b'\x00'
+if len(new) < len(old):
+    replacement += b'\x00' * (len(old) - len(new))
+
+data = data.replace(needle, replacement)
+path.write_bytes(data)
+PY
+}
+
 build_common::ar_extract_output_is_symbol_warning() {
   local output="$1"
   local line
@@ -364,7 +411,19 @@ build_common::mitigate_mingw_refptr_comdats() {
           echo "❌ Unable to compute sanitized name for section ${section} in ${member}" >&2
           exit 1
         fi
-        "$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member"
+        local rename_output=""
+        if ! rename_output="$("$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member" 2>&1)"; then
+          if [[ "$rename_output" == *"option is not supported for COFF"* ]]; then
+            if ! build_common::coff_replace_section_name "$member" "$section" "$new_name"; then
+              printf '%s\n' "$rename_output" >&2
+              echo "❌ Unable to rewrite COFF section ${section} in ${member}" >&2
+              exit 1
+            fi
+          else
+            printf '%s\n' "$rename_output" >&2
+            exit 1
+          fi
+        fi
         ((renamed_sections++))
       done
     done
