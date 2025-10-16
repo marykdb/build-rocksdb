@@ -180,7 +180,7 @@ register_config \
 
 register_config \
   mingwX64 \
-  host "LINUX|WINDOWS" \
+  host "LINUX|WINDOWS|MAC" \
   output_dir mingw_x86_64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=x86_64" \
@@ -189,7 +189,7 @@ register_config \
 
 register_config \
   mingwArm64 \
-  host "LINUX|WINDOWS" \
+  host "LINUX|WINDOWS|MAC" \
   output_dir mingw_arm64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=arm64" \

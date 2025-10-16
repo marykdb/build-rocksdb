@@ -163,6 +163,32 @@ build_common::find_tool() {
   return 1
 }
 
+build_common::ar_extract_output_is_symbol_warning() {
+  local output="$1"
+  local line
+  local recognized=0
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    case "$line" in
+      *"illegal output pathname for archive member: /"*|\
+      *"illegal output pathname for archive member: //"*|\
+      "No such file or directory")
+        recognized=1
+        continue
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<<"$output"
+
+  if (( recognized )); then
+    return 0
+  fi
+  return 1
+}
+
 build_common::mingw_binutils_candidates() {
   local preferred_triple="${1:-}"
 
@@ -277,7 +303,22 @@ build_common::mitigate_mingw_refptr_comdats() {
     return 1
   fi
 
-  if (( ${#members[@]} == 0 )); then
+  local -a object_members=()
+  local member
+  for member in "${members[@]}"; do
+    member="${member%$'\r'}"
+    if [[ -z "$member" ]]; then
+      continue
+    fi
+    case "$member" in
+      /|//|//*)
+        continue
+        ;;
+    esac
+    object_members+=("$member")
+  done
+
+  if (( ${#object_members[@]} == 0 )); then
     cleanup
     return 0
   fi
@@ -285,19 +326,25 @@ build_common::mitigate_mingw_refptr_comdats() {
   (
     set -euo pipefail
     cd "$tmpdir"
-    "$ar_bin" x "$archive_abs"
 
-    local member
-    local -a sections
+    local ar_extract_output=""
+    if ! ar_extract_output="$("$ar_bin" x "$archive_abs" 2>&1)"; then
+      if ! build_common::ar_extract_output_is_symbol_warning "$ar_extract_output"; then
+        printf '%s\n' "$ar_extract_output" >&2
+        exit 1
+      fi
+    fi
+
+    local -a sections=()
     local modified=0
     local renamed_sections=0
     local logged=0
 
-    for member in "${members[@]}"; do
+    for member in "${object_members[@]}"; do
       if [[ ! -f "$member" ]]; then
         continue
       fi
-      mapfile -t sections < <("$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.refptr/ {print $2}' ) || sections=()
+      mapfile -t sections < <("$objdump_bin" -h "$member" 2>/dev/null | awk '$2 ~ /\.refptr/ {print $2}') || sections=()
       if (( ${#sections[@]} == 0 )); then
         continue
       fi
@@ -308,11 +355,10 @@ build_common::mitigate_mingw_refptr_comdats() {
       fi
       local section
       for section in "${sections[@]}"; do
-        local new_name
-        new_name="$section"
-        new_name="${new_name/.rdata\$.refptr\./.rdata\$refptr_}"
+        local new_name="$section"
+        new_name="${new_name/.rdata$.refptr\./.rdata\$refptr_}"
         if [[ "$new_name" == "$section" ]]; then
-          new_name="${new_name/.rdata\$.refptr/.rdata\$refptr_}"
+          new_name="${new_name/.rdata$.refptr/.rdata\$refptr_}"
         fi
         if [[ "$new_name" == "$section" ]]; then
           echo "❌ Unable to compute sanitized name for section ${section} in ${member}" >&2
@@ -326,7 +372,7 @@ build_common::mitigate_mingw_refptr_comdats() {
     if (( modified )); then
       local new_archive="${archive_abs}.tmp"
       rm -f "$new_archive"
-      "$ar_bin" qc "$new_archive" "${members[@]}"
+      "$ar_bin" qc "$new_archive" "${object_members[@]}"
       if [[ -n "$ranlib_bin" ]]; then
         "$ranlib_bin" "$new_archive" >/dev/null 2>&1 || true
       fi
@@ -399,19 +445,54 @@ build_common::verify_mingw_refptr_sections_rewritten() {
     rm -rf "$tmpdir"
   }
 
+  local -a members=()
+  if ! mapfile -t members < <("$ar_bin" t "$archive_abs" 2>/dev/null); then
+    cleanup
+    return 1
+  fi
+
+  local -a object_members=()
+  local member
+  for member in "${members[@]}"; do
+    member="${member%$'\r'}"
+    if [[ -z "$member" ]]; then
+      continue
+    fi
+    case "$member" in
+      /|//|//*)
+        continue
+        ;;
+    esac
+    object_members+=("$member")
+  done
+
+  if (( ${#object_members[@]} == 0 )); then
+    cleanup
+    echo "🧪 [MinGW] verification passed for ${archive_abs}" >&2
+    return 0
+  fi
+
   local status=0
   (
     set -euo pipefail
     cd "$tmpdir"
-    "$ar_bin" x "$archive_abs"
-    local member
-    for member in *; do
-      [[ -e "$member" ]] || continue
-      if "$objdump_bin" -h "$member" 2>/dev/null | awk '/\\.refptr/ {exit 1}'; then
+
+    local ar_extract_output=""
+    if ! ar_extract_output="$("$ar_bin" x "$archive_abs" 2>&1)"; then
+      if ! build_common::ar_extract_output_is_symbol_warning "$ar_extract_output"; then
+        printf '%s\n' "$ar_extract_output" >&2
+        exit 1
+      fi
+    fi
+
+    for member in "${object_members[@]}"; do
+      if [[ ! -f "$member" ]]; then
         continue
       fi
-      echo "❌ MinGW refptr COMDATs remain in ${archive_abs} (member ${member})" >&2
-      exit 1
+      if "$objdump_bin" -h "$member" 2>/dev/null | grep -Fq '.refptr'; then
+        echo "❌ MinGW refptr COMDATs remain in ${archive_abs} (member ${member})" >&2
+        exit 1
+      fi
     done
   ) || status=$?
 
@@ -421,6 +502,7 @@ build_common::verify_mingw_refptr_sections_rewritten() {
   fi
   return $status
 }
+
 
 build_common::sanitize_mingw_archives_in_tree() {
   local root_dir="$1"
@@ -655,6 +737,24 @@ build_common::detect_llvm_mingw_root() {
     candidate_bins+=("$clang_dir")
   fi
 
+  if command -v brew >/dev/null 2>&1; then
+    local brew_prefix
+    local brew_formula
+    for brew_formula in llvm-mingw mingw-w64; do
+      brew_prefix="$(brew --prefix "${brew_formula}" 2>/dev/null || true)"
+      if [[ -z "$brew_prefix" ]]; then
+        continue
+      fi
+      if [[ -d "${brew_prefix}/${triple}" ]]; then
+        export LLVM_MINGW_ROOT="$brew_prefix"
+        return 0
+      fi
+      if [[ -d "${brew_prefix}/bin" ]]; then
+        candidate_bins+=("${brew_prefix}/bin")
+      fi
+    done
+  fi
+
   local bin_dir
   for bin_dir in "${candidate_bins[@]}"; do
     [[ -z "$bin_dir" ]] && continue
@@ -669,7 +769,7 @@ build_common::detect_llvm_mingw_root() {
   return 0
 }
 
-build_common::prefer_llvm_mingw_sysroot() { 
+build_common::prefer_llvm_mingw_sysroot() {
   local triple="$1"
 
   if [[ -z "${LLVM_MINGW_ROOT:-}" || -z "$triple" ]]; then
@@ -765,6 +865,25 @@ build_common::discover_mingw_sysroot() {
 
   candidates+=("/usr/${triple}")
   candidates+=("/opt/${triple}")
+
+  if command -v brew >/dev/null 2>&1; then
+    local brew_prefix
+    local brew_formula
+    local triple_arch
+    triple_arch="${triple%%-*}"
+    for brew_formula in mingw-w64 llvm-mingw; do
+      brew_prefix="$(brew --prefix "${brew_formula}" 2>/dev/null || true)"
+      if [[ -z "$brew_prefix" ]]; then
+        continue
+      fi
+      candidates+=("${brew_prefix}")
+      candidates+=("${brew_prefix}/${triple}")
+      if [[ -n "$triple_arch" ]]; then
+        candidates+=("${brew_prefix}/toolchain-${triple_arch}")
+        candidates+=("${brew_prefix}/toolchain-${triple_arch}/${triple}")
+      fi
+    done
+  fi
 
   local -a msys_prefixes=(/mingw64 /ucrt64 /clang64 /mingw32 /opt/mingw /opt/llvm-mingw)
   local prefix
