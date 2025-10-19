@@ -7,8 +7,8 @@ REPO_ROOT="$SCRIPT_DIR"
 
 # shellcheck source=./build-rocksdb-common.sh
 source "${REPO_ROOT}/build-rocksdb-common.sh"
-# shellcheck source=./build-rocksdb-mingw-sanitize.sh
-source "${REPO_ROOT}/build-rocksdb-mingw-sanitize.sh"
+# shellcheck source=./scripts/build-rocksdb-mingw-sanitize.sh
+source "${REPO_ROOT}/scripts/build-rocksdb-mingw-sanitize.sh"
 
 ARCH=""
 for arg in "$@"; do

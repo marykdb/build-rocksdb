@@ -2,6 +2,74 @@
 
 # Common helper functions shared across build scripts for RocksDB.
 
+BUILD_COMMON_VALIDATED_MINGW_ROOTS=""
+BUILD_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_COMMON_MINGW_SANITIZER_LOADED=0
+
+build_common::load_mingw_sanitizer() {
+  if (( BUILD_COMMON_MINGW_SANITIZER_LOADED )); then
+    return 0
+  fi
+  local sanitizer_script="${BUILD_COMMON_DIR}/scripts/build-rocksdb-mingw-sanitize.sh"
+  if [[ ! -f "$sanitizer_script" ]]; then
+    echo "❌ Missing MinGW sanitizer helpers at ${sanitizer_script}" >&2
+    return 1
+  fi
+  # shellcheck source=./scripts/build-rocksdb-mingw-sanitize.sh
+  source "$sanitizer_script"
+  BUILD_COMMON_MINGW_SANITIZER_LOADED=1
+}
+
+build_common::coff_replace_section_name() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::coff_replace_section_name "$@"
+}
+
+build_common::ar_extract_output_is_symbol_warning() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::ar_extract_output_is_symbol_warning "$@"
+}
+
+build_common::mingw_binutils_candidates() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::mingw_binutils_candidates "$@"
+}
+
+build_common::resolve_mingw_binutils() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::resolve_mingw_binutils "$@"
+}
+
+build_common::mitigate_mingw_refptr_comdats() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::mitigate_mingw_refptr_comdats "$@"
+}
+
+build_common::verify_mingw_refptr_sections_rewritten() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::verify_mingw_refptr_sections_rewritten "$@"
+}
+
+build_common::sanitize_mingw_archives_in_tree() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::sanitize_mingw_archives_in_tree "$@"
+}
+
+build_common::assert_mingw_archives_sanitized() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::assert_mingw_archives_sanitized "$@"
+}
+
+build_common::is_mingw_triple() {
+  local triple="${1:-}"
+  if [[ -z "$triple" ]]; then
+    return 1
+  fi
+  case "$triple" in
+    *-w64-mingw32*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
 
 
 build_common::append_unique_flag() {
@@ -165,78 +233,6 @@ build_common::find_tool() {
   return 1
 }
 
-build_common::coff_replace_section_name() {
-  local object_file="$1"
-  local old_name="$2"
-  local new_name="$3"
-
-  if [[ -z "$object_file" || -z "$old_name" || -z "$new_name" ]]; then
-    return 1
-  fi
-
-  local python_bin=""
-  if command -v python3 >/dev/null 2>&1; then
-    python_bin="python3"
-  elif command -v python >/dev/null 2>&1; then
-    python_bin="python"
-  else
-    echo "❌ Unable to locate python interpreter to rewrite COFF section names" >&2
-    return 1
-  fi
-
-  "$python_bin" - "$object_file" "$old_name" "$new_name" <<'PY'
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-old = sys.argv[2].encode('ascii')
-new = sys.argv[3].encode('ascii')
-
-needle = old + b'\x00'
-if len(new) > len(old):
-    sys.stderr.write("replacement name longer than original\n")
-    sys.exit(1)
-
-data = path.read_bytes()
-count = data.count(needle)
-if count == 0:
-    sys.stderr.write("section name not found in object\n")
-    sys.exit(1)
-
-replacement = new + b'\x00'
-if len(new) < len(old):
-    replacement += b'\x00' * (len(old) - len(new))
-
-data = data.replace(needle, replacement)
-path.write_bytes(data)
-PY
-}
-
-build_common::ar_extract_output_is_symbol_warning() {
-  local output="$1"
-  local line
-  local recognized=0
-
-  while IFS= read -r line; do
-    [[ -z "$line" ]] && continue
-    case "$line" in
-      *"illegal output pathname for archive member: /"*|\
-      *"illegal output pathname for archive member: //"*|\
-      "No such file or directory")
-        recognized=1
-        continue
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  done <<<"$output"
-
-  if (( recognized )); then
-    return 0
-  fi
-  return 1
-}
 
 build_common::read_cmake_version() {
   if [[ -n "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE:-}" ]]; then
