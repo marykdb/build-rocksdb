@@ -154,53 +154,56 @@ jobs:
       - name: Install build dependencies
         run: |
           choco install -y ninja 7zip
-      - name: Provision JetBrains MSYS2 toolchain
+      - name: Provision WinLibs GCC toolchain
         run: |
           set -euo pipefail
           TOOLCHAIN_DIR="$PWD/toolchains"
-          JB_ARCHIVE="msys2-mingw-w64-x86_64-2.zip"
-          JB_URL="https://download.jetbrains.com/kotlin/native/${JB_ARCHIVE}"
-          ARCHIVE_PATH="$PWD/${JB_ARCHIVE}"
-          curl --fail --location --silent --show-error "$JB_URL" --output "$ARCHIVE_PATH"
-          JB_ROOT="$TOOLCHAIN_DIR/jetbrains-msys2"
-          rm -rf "$JB_ROOT"
-          mkdir -p "$JB_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$JB_ROOT" >/dev/null
+          WINLIBS_VERSION="9.5.0"
+          WINLIBS_RELEASE="9.5.0-10.0.0-msvcrt-r1"
+          ARCHIVE_NAME="winlibs-x86_64-posix-seh-gcc-${WINLIBS_VERSION}-mingw-w64msvcrt-10.0.0-r1.zip"
+          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
+          curl --fail --location --silent --show-error             "https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_RELEASE}/${ARCHIVE_NAME}"             --output "$ARCHIVE_PATH"
+          WINLIBS_ROOT="$TOOLCHAIN_DIR/winlibs-gcc-${WINLIBS_VERSION}"
+          rm -rf "$WINLIBS_ROOT"
+          mkdir -p "$WINLIBS_ROOT"
+          7z x "$ARCHIVE_PATH" -o"$WINLIBS_ROOT" >/dev/null
           rm -f "$ARCHIVE_PATH"
-          SYSROOT="$JB_ROOT/msys2-mingw-w64-x86_64-2"
-          if [[ ! -d "$SYSROOT/include" ]]; then
-            echo "Failed to locate JetBrains sysroot includes at $SYSROOT" >&2
+          if [[ -d "$WINLIBS_ROOT/mingw64" ]]; then
+            MINGW_ROOT="$WINLIBS_ROOT/mingw64"
+          else
+            MINGW_ROOT="$(find "$WINLIBS_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1)"
+          fi
+          if [[ -z "$MINGW_ROOT" || ! -d "$MINGW_ROOT/bin" ]]; then
+            echo "Failed to locate mingw64 directory inside WinLibs archive" >&2
             exit 1
           fi
           if command -v cygpath >/dev/null 2>&1; then
-            SYSROOT_UNIX="$(cygpath -u "$SYSROOT")"
-            TRIPLE_BIN_UNIX="$(cygpath -u "$SYSROOT/x86_64-w64-mingw32/bin")"
-            POSIX_BIN_UNIX="$(cygpath -u "$SYSROOT/bin")"
+            MINGW_ROOT_UNIX="$(cygpath -u "$MINGW_ROOT")"
+            BIN_UNIX="$(cygpath -u "$MINGW_ROOT/bin")"
           else
-            SYSROOT_UNIX="$SYSROOT"
-            TRIPLE_BIN_UNIX="$SYSROOT/x86_64-w64-mingw32/bin"
-            POSIX_BIN_UNIX="$SYSROOT/bin"
+            MINGW_ROOT_UNIX="$MINGW_ROOT"
+            BIN_UNIX="$MINGW_ROOT/bin"
           fi
-          CC_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc.exe"
-          CXX_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-g++.exe"
-          AR_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc-ar.exe"
-          RANLIB_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc-ranlib.exe"
-          STRIP_PATH="$TRIPLE_BIN_UNIX/strip.exe"
-          NM_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc-nm.exe"
-          OBJCOPY_PATH="$TRIPLE_BIN_UNIX/objcopy.exe"
-          OBJDUMP_PATH="$TRIPLE_BIN_UNIX/objdump.exe"
-          if [[ -x "$TRIPLE_BIN_UNIX/windres.exe" ]]; then
-            RC_PATH="$TRIPLE_BIN_UNIX/windres.exe"
-          else
-            RC_PATH="$POSIX_BIN_UNIX/windres.exe"
+          CC_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc.exe"
+          CXX_PATH="$BIN_UNIX/x86_64-w64-mingw32-g++.exe"
+          AR_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc-ar.exe"
+          RANLIB_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc-ranlib.exe"
+          STRIP_PATH="$BIN_UNIX/strip.exe"
+          NM_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc-nm.exe"
+          OBJCOPY_PATH="$BIN_UNIX/objcopy.exe"
+          OBJDUMP_PATH="$BIN_UNIX/objdump.exe"
+          RC_PATH="$BIN_UNIX/windres.exe"
+          if [[ ! -x "$RC_PATH" ]]; then
+            RC_PATH="$BIN_UNIX/x86_64-w64-mingw32-windres.exe"
           fi
           {
             echo "MINGW_TRIPLE=x86_64-w64-mingw32"
-            echo "MINGW_SYSROOT=$SYSROOT_UNIX"
-            echo "MINGW_GCC92_SYSROOT=$SYSROOT_UNIX"
-            echo "MINGW_FALLBACK_SYSROOT=$SYSROOT_UNIX"
-            echo "JB_MSYS2_TRIPLE_BIN=$TRIPLE_BIN_UNIX"
-            echo "JB_MSYS2_BIN=$POSIX_BIN_UNIX"
+            echo "MINGW_SYSROOT=$MINGW_ROOT_UNIX"
+            echo "MINGW_GCC92_SYSROOT=$MINGW_ROOT_UNIX"
+            echo "MINGW_FALLBACK_SYSROOT=$MINGW_ROOT_UNIX"
+            echo "WINLIBS_BIN=$BIN_UNIX"
+            echo "BZIP2_GCC_BIN_DIR=$BIN_UNIX"
+            echo "BZIP2_GCC_SYSROOT=$MINGW_ROOT_UNIX"
             echo "CC=$CC_PATH"
             echo "CXX=$CXX_PATH"
             echo "AR=$AR_PATH"
@@ -215,9 +218,11 @@ jobs:
             echo "CMAKE_NM=$NM_PATH"
             echo "CMAKE_OBJCOPY=$OBJCOPY_PATH"
             echo "CMAKE_OBJDUMP=$OBJDUMP_PATH"
+            echo "CFLAGS="
+            echo "CXXFLAGS="
+            echo "LDFLAGS="
           } >> "$GITHUB_ENV"
-          echo "$TRIPLE_BIN_UNIX" >> "$GITHUB_PATH"
-          echo "$POSIX_BIN_UNIX" >> "$GITHUB_PATH"
+          echo "$BIN_UNIX" >> "$GITHUB_PATH"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - name: Verify libstdc++ usage in MinGW build
