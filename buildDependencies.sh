@@ -691,7 +691,7 @@ build_bzip2() {
 
   local cflags="${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64"
   if (( is_mingw )); then
-    cflags="-O1 -fPIC -fvisibility=hidden -DNDEBUG -D_FILE_OFFSET_BITS=64 -fno-tree-vectorize -mno-avx512f -mno-avx2 -mno-avx"
+    cflags="-O2 -fPIC -fvisibility=hidden -DNDEBUG"
   fi
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
 
