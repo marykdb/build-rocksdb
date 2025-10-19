@@ -250,9 +250,6 @@ build_common_mingw::mitigate_mingw_refptr_comdats() {
     return 1
   fi
 
-  local objcopy_index=0
-  local objcopy_bin="${objcopy_bins[$objcopy_index]}"
-
   local archive_dir archive_base archive_abs
   archive_dir="$(cd "$(dirname "$archive")" 2>/dev/null && pwd 2>/dev/null)"
   archive_base="$(basename "$archive")"
@@ -263,30 +260,22 @@ build_common_mingw::mitigate_mingw_refptr_comdats() {
   fi
 
   local -a members=()
-  local members_output
-  if ! members_output="$("$ar_bin" t "$archive_abs" 2>/dev/null)"; then
+  if ! mapfile -t members < <("$ar_bin" t "$archive_abs" 2>/dev/null); then
     return 1
   fi
-  while IFS= read -r member_line; do
-    members+=("$member_line")
-  done <<<"$members_output"
 
   local -a object_members=()
   local member
   for member in "${members[@]}"; do
     member="${member%$'\r'}"
-    if [[ -z "$member" ]]; then
-      continue
-    fi
     case "$member" in
-      /|//|//*)
-        continue
-        ;;
+      ''|/|//|//* ) continue ;;
+      * ) object_members+=("$member") ;;
     esac
-    object_members+=("$member")
   done
 
   if (( ${#object_members[@]} == 0 )); then
+    BUILD_COMMON_MINGW_SANITIZED_STATUS["$archive_abs"]="clean"
     return 0
   fi
 
@@ -310,17 +299,12 @@ build_common_mingw::mitigate_mingw_refptr_comdats() {
       member_sections["$section_member"]="$section_name"
       members_with_refptr+=("$section_member")
     fi
-  done < <("$objdump_bin" --section-headers --archive-headers "$archive_abs" 2>/dev/null | \
-    awk 'BEGIN { member="" } \
-         /^[^ ]+:\\s+file format/ { member=$1; sub(/:$/, "", member); next } \
-         /^[[:space:]]+[0-9]+[[:space:]]+/ { \
-           if (member == "") next; \
-           section=$2; \
-           if (section ~ /\\.refptr/) printf "%s\t%s\n", member, section; \
-         }')
+  done < <("$objdump_bin" --section-headers --archive-headers "$archive_abs" 2>/dev/null | awk 'BEGIN { member="" } /^[^ ]+:\s+file format/ { member=$1; sub(/:$/, "", member); next } /^[[:space:]]+[0-9]+[[:space:]]+/ { if (member == "") next; section=$2; if (section ~ /\\.refptr/) printf "%s\t%s\n", member, section; }')
 
   if (( ${#members_with_refptr[@]} == 0 )); then
     BUILD_COMMON_MINGW_SANITIZED_STATUS["$archive_abs"]="clean"
+    local stamp_path="${archive_abs}.mingw_refptr_sanitized"
+    touch "$stamp_path" 2>/dev/null || true
     return 0
   fi
 
@@ -331,27 +315,21 @@ build_common_mingw::mitigate_mingw_refptr_comdats() {
     return 1
   fi
 
-  local cleanup
-  cleanup() {
-    if [[ -n "$tmpdir" ]]; then
-      rm -rf "$tmpdir"
-    fi
-  }
-  trap cleanup RETURN
+  trap 'rm -rf "$tmpdir"' RETURN
 
-  local archive_tmp
-  archive_tmp="${tmpdir}/${archive_base}"
+  local archive_tmp="${tmpdir}/${archive_base}"
   cp "$archive_abs" "$archive_tmp"
 
   local extraction_output=""
   if ! extraction_output="$( (cd "$tmpdir" && "$ar_bin" x "$archive_tmp") 2>&1 )"; then
-    local extract_status=$?
-    local extracted_warning_output="${extraction_output}"
+    local extracted_warning_output="$extraction_output"
+    local objcopy_index=0
+    local objcopy_bin="${objcopy_bins[$objcopy_index]}"
     if build_common_mingw::ar_extract_output_is_symbol_warning "$extracted_warning_output"; then
       echo "ℹ️  Retrying extraction of ${archive_base} with alternative tool" >&2
       objcopy_index=$(((objcopy_index + 1) % ${#objcopy_bins[@]}))
       objcopy_bin="${objcopy_bins[$objcopy_index]}"
-      if ! extraction_output="$((cd "$tmpdir" && "$objcopy_bin" --extract-symbol "$archive_tmp") 2>&1)"; then
+      if ! (cd "$tmpdir" && "$objcopy_bin" --extract-symbol "$archive_tmp" >/dev/null 2>&1); then
         echo "❌  Failed to extract archive ${archive_abs}: ${extraction_output}" >&2
         return 1
       fi
@@ -361,7 +339,7 @@ build_common_mingw::mitigate_mingw_refptr_comdats() {
     fi
   fi
 
-  local rewritten=0
+  local -a repack_members=()
   local renamed_sections=0
   for member in "${members_with_refptr[@]}"; do
     local member_path="${tmpdir}/${member}"
@@ -372,37 +350,41 @@ build_common_mingw::mitigate_mingw_refptr_comdats() {
         continue
       fi
     fi
+    repack_members+=("${member_path##*/}")
 
     local sections
     IFS=$'\n' read -r -d '' -a sections < <(printf '%s\0' "${member_sections[$member]}")
     local section
     for section in "${sections[@]}"; do
-      local sanitized="${section/.refptr/.refptr.lld}"
-      if build_common_mingw::coff_replace_section_name "$member_path" "$section" "$sanitized"; then
+      local sanitized_name="${section/.refptr/.refptr.lld}"
+      if build_common_mingw::coff_replace_section_name "$member_path" "$section" "$sanitized_name"; then
         renamed_sections=$((renamed_sections + 1))
       else
         echo "⚠️  [MinGW] Failed to rewrite section ${section} in ${member}" >&2
       fi
     done
-
-    rewritten=1
   done
 
-  if (( rewritten == 0 )); then
+  if (( renamed_sections == 0 )); then
     BUILD_COMMON_MINGW_SANITIZED_STATUS["$archive_abs"]="clean"
+    local stamp_path="${archive_abs}.mingw_refptr_sanitized"
+    touch "$stamp_path" 2>/dev/null || true
     return 0
   fi
 
-  (cd "$tmpdir" && "$ar_bin" rcs "$archive_abs" ./*.o)
-  if [[ -n "$ranlib_bin" ]]; then
-    "$ranlib_bin" "$archive_abs"
+  if ! (cd "$tmpdir" && "$ar_bin" r "$archive_tmp" "${repack_members[@]}" >/dev/null 2>&1); then
+    echo "❌ Unable to update ${archive_abs} with rewritten members" >&2
+    return 1
   fi
-
-  trap - EXIT
-  cleanup
-
+  if [[ -n "$ranlib_bin" ]]; then
+    "$ranlib_bin" "$archive_tmp" >/dev/null 2>&1 || true
+  fi
+  mv "$archive_tmp" "$archive_abs"
   BUILD_COMMON_MINGW_SANITIZED_STATUS["$archive_abs"]="rewritten"
+  local stamp_path="${archive_abs}.mingw_refptr_sanitized"
+  touch "$stamp_path" 2>/dev/null || true
   echo "✅ [MinGW] sanitized ${archive_abs} (${renamed_sections} sections updated)" >&2
+
   return 0
 }
 
@@ -457,6 +439,8 @@ build_common_mingw::verify_mingw_refptr_sections_rewritten() {
     return 1
   fi
 
+  local stamp_path="${archive_abs}.mingw_refptr_sanitized"
+  touch "$stamp_path" 2>/dev/null || true
   echo "✅ [MinGW] verified ${archive_abs}" >&2
   return 0
 }
@@ -479,56 +463,40 @@ build_common_mingw::sanitize_mingw_archives_in_tree() {
     root_dir="$normalized_root"
   fi
 
-  local stamp_file="${root_dir%/}/.mingw_refptr_sanitized"
-  if [[ -f "$stamp_file" ]]; then
-    if ! find "$root_dir" -type f -name '*.a' -newer "$stamp_file" -print -quit 2>/dev/null | grep -q .; then
-      echo "ℹ️  [MinGW] archives already sanitized under ${root_dir} (stamp up to date)" >&2
-      return 0
-    fi
-  fi
+  local overall_status=0
+  local found=0
 
   echo "🔍 [MinGW] scanning ${root_dir} for static archives" >&2
 
-  local -a archives=()
   while IFS= read -r -d '' archive_path; do
-    archives+=("$archive_path")
-  done < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null)
+    found=1
+    local archive_abs="$archive_path"
+    local stamp_path="${archive_abs}.mingw_refptr_sanitized"
 
-  if (( ${#archives[@]} == 0 )); then
-    return 0
-  fi
+    if [[ -f "$stamp_path" && "$stamp_path" -nt "$archive_abs" ]]; then
+      echo "ℹ️  [MinGW] ${archive_abs} already sanitized (stamp up to date)" >&2
+      continue
+    fi
 
-  BUILD_COMMON_MINGW_SANITIZED_STATUS=()
+    BUILD_COMMON_MINGW_SANITIZED_STATUS=()
 
-  local archive
-  local overall_status=0
-  local -a verification_targets=()
-  for archive in "${archives[@]}"; do
-    if ! build_common_mingw::mitigate_mingw_refptr_comdats "$archive" "$preferred_triple"; then
+    if ! build_common_mingw::mitigate_mingw_refptr_comdats "$archive_abs" "$preferred_triple"; then
       overall_status=1
       continue
     fi
-    local sanitized_state="${BUILD_COMMON_MINGW_SANITIZED_STATUS[$archive]:-}"
-    case "$sanitized_state" in
-      rewritten)
-        verification_targets+=("$archive")
-        ;;
-      clean)
-        ;;
-      *)
-        verification_targets+=("$archive")
-        ;;
-    esac
-  done
 
-  for archive in "${verification_targets[@]}"; do
-    if ! build_common_mingw::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
-      overall_status=1
+    local sanitized_state="${BUILD_COMMON_MINGW_SANITIZED_STATUS[$archive_abs]:-}"
+    if [[ "$sanitized_state" == "rewritten" ]]; then
+      if ! build_common_mingw::verify_mingw_refptr_sections_rewritten "$archive_abs" "$preferred_triple"; then
+        overall_status=1
+      fi
+    else
+      touch "$stamp_path" 2>/dev/null || true
     fi
-  done
+  done < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null)
 
-  if (( overall_status == 0 )); then
-    touch "$stamp_file" 2>/dev/null || true
+  if (( ! found )); then
+    echo "ℹ️  [MinGW] no archives found under ${root_dir}" >&2
   fi
 
   return $overall_status
@@ -558,46 +526,22 @@ build_common_mingw::assert_mingw_archives_sanitized() {
     root_dir="$normalized_root"
   fi
 
-  if [[ ":${BUILD_COMMON_VALIDATED_MINGW_ROOTS:-}:" == *":$root_dir:"* ]]; then
-    return 0
-  fi
-
-  local stamp_file="${root_dir%/}/.mingw_refptr_sanitized"
-  if [[ -f "$stamp_file" ]]; then
-    if ! find "$root_dir" -type f -name '*.a' -newer "$stamp_file" -print -quit 2>/dev/null | grep -q .; then
-      if [[ -n "${BUILD_COMMON_VALIDATED_MINGW_ROOTS:-}" ]]; then
-        BUILD_COMMON_VALIDATED_MINGW_ROOTS+=":$root_dir"
-      else
-        BUILD_COMMON_VALIDATED_MINGW_ROOTS="$root_dir"
-      fi
-      echo "ℹ️  [MinGW] validation skipped for ${root_dir} (stamp up to date)" >&2
-      return 0
-    fi
-  fi
-
-  echo "🧪 [MinGW] validating sanitized archives under ${root_dir}" >&2
-
-  local -a archives=()
+  local archives_found=0
   while IFS= read -r -d '' archive_path; do
-    archives+=("$archive_path")
-  done < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null)
-
-  if (( ${#archives[@]} == 0 )); then
-    echo "❌ No static libraries were discovered under ${root_dir}" >&2
-    return 1
-  fi
-
-  local archive
-  for archive in "${archives[@]}"; do
-    if ! build_common_mingw::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
+    archives_found=1
+    local archive_abs="$archive_path"
+    local stamp_path="${archive_abs}.mingw_refptr_sanitized"
+    if [[ -f "$stamp_path" && "$stamp_path" -nt "$archive_abs" ]]; then
+      continue
+    fi
+    if ! build_common_mingw::verify_mingw_refptr_sections_rewritten "$archive_abs" "$preferred_triple"; then
       return 1
     fi
-  done
+  done < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null)
 
-  if [[ -n "${BUILD_COMMON_VALIDATED_MINGW_ROOTS:-}" ]]; then
-    BUILD_COMMON_VALIDATED_MINGW_ROOTS+=":$root_dir"
-  else
-    BUILD_COMMON_VALIDATED_MINGW_ROOTS="$root_dir"
+  if (( ! archives_found )); then
+    echo "❌ No static libraries were discovered under ${root_dir}" >&2
+    return 1
   fi
 
   return 0
