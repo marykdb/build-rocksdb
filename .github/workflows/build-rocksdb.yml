@@ -154,27 +154,24 @@ jobs:
       - name: Install build dependencies
         run: |
           choco install -y ninja 7zip
-      - name: Provision WinLibs GCC toolchain
+      - name: Build Windows MinGW package
+        run: ./rdb-win.sh
+      - name: Export MinGW toolchain environment for validation
         run: |
           set -euo pipefail
           TOOLCHAIN_DIR="$PWD/toolchains"
-          WINLIBS_VERSION="9.5.0"
-          WINLIBS_RELEASE="9.5.0-10.0.0-msvcrt-r1"
-          ARCHIVE_NAME="winlibs-x86_64-posix-seh-gcc-${WINLIBS_VERSION}-mingw-w64msvcrt-10.0.0-r1.zip"
-          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-          curl --fail --location --silent --show-error             "https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_RELEASE}/${ARCHIVE_NAME}"             --output "$ARCHIVE_PATH"
-          WINLIBS_ROOT="$TOOLCHAIN_DIR/winlibs-gcc-${WINLIBS_VERSION}"
-          rm -rf "$WINLIBS_ROOT"
-          mkdir -p "$WINLIBS_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$WINLIBS_ROOT" >/dev/null
-          rm -f "$ARCHIVE_PATH"
+          WINLIBS_ROOT="$(find "$TOOLCHAIN_DIR" -maxdepth 1 -type d -name 'winlibs-gcc-*' | head -n 1 || true)"
+          if [[ -z "$WINLIBS_ROOT" ]]; then
+            echo "WinLibs toolchain not found" >&2
+            exit 1
+          fi
           if [[ -d "$WINLIBS_ROOT/mingw64" ]]; then
             MINGW_ROOT="$WINLIBS_ROOT/mingw64"
           else
-            MINGW_ROOT="$(find "$WINLIBS_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1)"
+            MINGW_ROOT="$(find "$WINLIBS_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1 || true)"
           fi
           if [[ -z "$MINGW_ROOT" || ! -d "$MINGW_ROOT/bin" ]]; then
-            echo "Failed to locate mingw64 directory inside WinLibs archive" >&2
+            echo "Failed to locate mingw64 directory inside WinLibs tree" >&2
             exit 1
           fi
           if command -v cygpath >/dev/null 2>&1; then
@@ -184,47 +181,41 @@ jobs:
             MINGW_ROOT_UNIX="$MINGW_ROOT"
             BIN_UNIX="$MINGW_ROOT/bin"
           fi
-          CC_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc.exe"
-          CXX_PATH="$BIN_UNIX/x86_64-w64-mingw32-g++.exe"
-          AR_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc-ar.exe"
-          RANLIB_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc-ranlib.exe"
-          STRIP_PATH="$BIN_UNIX/strip.exe"
-          NM_PATH="$BIN_UNIX/x86_64-w64-mingw32-gcc-nm.exe"
-          OBJCOPY_PATH="$BIN_UNIX/objcopy.exe"
-          OBJDUMP_PATH="$BIN_UNIX/objdump.exe"
-          RC_PATH="$BIN_UNIX/windres.exe"
-          if [[ ! -x "$RC_PATH" ]]; then
-            RC_PATH="$BIN_UNIX/x86_64-w64-mingw32-windres.exe"
+          LLVM_ROOT="$(find "$TOOLCHAIN_DIR" -maxdepth 1 -type d -name 'llvm-mingw-*' | head -n 1 || true)"
+          if [[ -n "$LLVM_ROOT" ]]; then
+            if command -v cygpath >/dev/null 2>&1; then
+              LLVM_BIN="$(cygpath -u "$LLVM_ROOT/bin")"
+            else
+              LLVM_BIN="$LLVM_ROOT/bin"
+            fi
+            if [[ -d "$LLVM_BIN" ]]; then
+              echo "$LLVM_BIN" >> "$GITHUB_PATH"
+            fi
           fi
           {
             echo "MINGW_TRIPLE=x86_64-w64-mingw32"
             echo "MINGW_SYSROOT=$MINGW_ROOT_UNIX"
             echo "MINGW_GCC92_SYSROOT=$MINGW_ROOT_UNIX"
             echo "MINGW_FALLBACK_SYSROOT=$MINGW_ROOT_UNIX"
-            echo "WINLIBS_BIN=$BIN_UNIX"
-            echo "BZIP2_GCC_BIN_DIR=$BIN_UNIX"
-            echo "BZIP2_GCC_SYSROOT=$MINGW_ROOT_UNIX"
-            echo "CC=$CC_PATH"
-            echo "CXX=$CXX_PATH"
-            echo "AR=$AR_PATH"
-            echo "RANLIB=$RANLIB_PATH"
-            echo "STRIP=$STRIP_PATH"
-            echo "NM=$NM_PATH"
-            echo "OBJCOPY=$OBJCOPY_PATH"
-            echo "OBJDUMP=$OBJDUMP_PATH"
-            echo "RC=$RC_PATH"
-            echo "CMAKE_AR=$AR_PATH"
-            echo "CMAKE_RANLIB=$RANLIB_PATH"
-            echo "CMAKE_NM=$NM_PATH"
-            echo "CMAKE_OBJCOPY=$OBJCOPY_PATH"
-            echo "CMAKE_OBJDUMP=$OBJDUMP_PATH"
+            echo "CC=$BIN_UNIX/x86_64-w64-mingw32-gcc.exe"
+            echo "CXX=$BIN_UNIX/x86_64-w64-mingw32-g++.exe"
+            echo "AR=$BIN_UNIX/x86_64-w64-mingw32-gcc-ar.exe"
+            echo "RANLIB=$BIN_UNIX/x86_64-w64-mingw32-gcc-ranlib.exe"
+            echo "STRIP=$BIN_UNIX/strip.exe"
+            echo "NM=$BIN_UNIX/x86_64-w64-mingw32-gcc-nm.exe"
+            echo "OBJCOPY=$BIN_UNIX/objcopy.exe"
+            echo "OBJDUMP=$BIN_UNIX/objdump.exe"
+            echo "RC=$BIN_UNIX/windres.exe"
+            echo "CMAKE_AR=$BIN_UNIX/x86_64-w64-mingw32-gcc-ar.exe"
+            echo "CMAKE_RANLIB=$BIN_UNIX/x86_64-w64-mingw32-gcc-ranlib.exe"
+            echo "CMAKE_NM=$BIN_UNIX/x86_64-w64-mingw32-gcc-nm.exe"
+            echo "CMAKE_OBJCOPY=$BIN_UNIX/objcopy.exe"
+            echo "CMAKE_OBJDUMP=$BIN_UNIX/objdump.exe"
             echo "CFLAGS="
             echo "CXXFLAGS="
             echo "LDFLAGS="
           } >> "$GITHUB_ENV"
           echo "$BIN_UNIX" >> "$GITHUB_PATH"
-      - name: Build Windows MinGW package
-        run: ./build.sh mingwX64
       - name: Verify libstdc++ usage in MinGW build
         run: |
           set -euo pipefail
