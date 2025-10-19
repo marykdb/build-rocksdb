@@ -4,6 +4,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$SCRIPT_DIR"
 
+# shellcheck source=./build-rocksdb-common.sh
+source "${PROJECT_ROOT}/build-rocksdb-common.sh"
+
 usage() {
   cat <<'USAGE'
 Usage: ./build.sh [OPTIONS] [CONFIG ...]
@@ -177,7 +180,7 @@ register_config \
 
 register_config \
   mingwX64 \
-  host "LINUX|WINDOWS" \
+  host "LINUX|WINDOWS|MAC" \
   output_dir mingw_x86_64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=x86_64" \
@@ -186,7 +189,7 @@ register_config \
 
 register_config \
   mingwArm64 \
-  host "LINUX|WINDOWS" \
+  host "LINUX|WINDOWS|MAC" \
   output_dir mingw_arm64 \
   build_script buildRocksdbMinGW.sh \
   build_args "--arch=arm64" \
@@ -472,6 +475,21 @@ config_artifact_name() {
   config_field "$1" artifact
 }
 
+config_is_mingw() {
+  case "$1" in
+    mingw*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+config_mingw_triple() {
+  case "$1" in
+    mingwX64) echo "x86_64-w64-mingw32" ;;
+    mingwArm64) echo "aarch64-w64-mingw32" ;;
+    *) echo "" ;;
+  esac
+}
+
 prepare_headers() {
   local include_src="$PROJECT_ROOT/rocksdb/include"
   local include_dest="$PROJECT_ROOT/build/include/rocksdb"
@@ -537,6 +555,14 @@ package_artifacts() {
 
   if [[ ! -f "$lib_base/librocksdb.a" && ! -f "$lib_base/rocksdb-build/librocksdb.a" ]]; then
     fail "RocksDB static library not found in $lib_base"
+  fi
+
+  if config_is_mingw "$config"; then
+    if [[ "${SKIP_MINGW_SANITIZE:-0}" != "1" ]]; then
+      build_common::assert_mingw_archives_sanitized "$lib_base" "$(config_mingw_triple "$config")"
+    else
+      echo "⚠️  Skipping MinGW archive validation because SKIP_MINGW_SANITIZE=${SKIP_MINGW_SANITIZE}" >&2
+    fi
   fi
 
   local staging

@@ -106,6 +106,9 @@ fi
 
 strip_archive() {
   local archive="$1"
+  if is_mingw_build; then
+    return 0
+  fi
   if [[ -n "$STRIP_BIN" && -f "$archive" ]]; then
     "$STRIP_BIN" -S -x "$archive" || true
   fi
@@ -688,7 +691,7 @@ build_bzip2() {
 
   local cflags="${OPT_CFLAGS} -D_FILE_OFFSET_BITS=64"
   if (( is_mingw )); then
-    cflags+=" -O2 -fno-tree-vectorize"
+    cflags="-O2 -fPIC -fvisibility=hidden -DNDEBUG"
   fi
   [[ -n "${EXTRA_CFLAGS:-}" ]] && cflags="${EXTRA_CFLAGS} ${cflags}"
 
@@ -1123,6 +1126,19 @@ else
   # Download, verify, and build LZ4
   download_and_verify "lz4" "$LZ4_VER" "$LZ4_DOWNLOAD_BASE" "$LZ4_SHA256"
   build_lz4
+fi
+
+if is_mingw_build; then
+  # shellcheck source=./scripts/build-rocksdb-mingw-sanitize.sh
+  source "${SCRIPT_DIR}/scripts/build-rocksdb-mingw-sanitize.sh"
+  if [[ "${SKIP_MINGW_SANITIZE:-0}" == "1" ]]; then
+    echo "⚠️  Skipping MinGW archive sanitization because SKIP_MINGW_SANITIZE=${SKIP_MINGW_SANITIZE}"
+  else
+    echo "Sanitizing MinGW archives under ${OUTPUT_DIR}"
+    refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
+    build_common::sanitize_mingw_archives_in_tree "${OUTPUT_DIR}" "$refptr_triple"
+    build_common::assert_mingw_archives_sanitized "${OUTPUT_DIR}" "$refptr_triple"
+  fi
 fi
 
 echo "All dependencies have been successfully built and are located in ${OUTPUT_DIR}!"

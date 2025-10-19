@@ -1,0 +1,65 @@
+# MinGW build guidance and `.refptr` retention
+
+This project now hardens the Windows/MinGW build so that static archives keep the
+`.refptr` COMDAT sections that C++ libraries (such as Snappy) rely on to preserve
+v-table pointers. Kotlin/Native's LLVM-based linker previously discarded those
+COMDATs, rewriting RIP-relative loads to point at zero and crashing executables
+at runtime. The mitigation now renames every `.rdata$.refptr.*` section to
+`.rdata$refptr_*` and marks it as ordinary read-only data. That prevents the
+linker from garbage-collecting them and fixes the crash described in
+[KT-81420](https://youtrack.jetbrains.com/issue/KT-81420).
+
+## Supported build workflows
+
+You can safely produce working MinGW artefacts in any of the following ways:
+
+1. **Top-level orchestrator** – On a Linux host run `./build.sh` (optionally with
+   `--konan-version` and/or explicit target names). The script provisions the
+   toolchain, invokes `buildDependencies.sh`, and then calls
+   `buildRocksdbMinGW.sh`. The mitigation automatically post-processes every
+   MinGW archive that the orchestrator produces, and the packaging step now
+   re-sanitises and validates the library directory immediately before the ZIP
+   is created. The resulting `rocksdb-mingw-*.zip` archives keep their `.refptr`
+   data intact.
+2. **Direct RocksDB rebuild** – When you only need to refresh the RocksDB static
+   library, run `./buildRocksdbMinGW.sh --arch=x86_64` or `--arch=arm64`. The
+   script drives a dedicated CMake build directory and now post-processes the
+   generated `librocksdb.a` (and its staged variant under `rocksdb-build/`) to
+   neutralise `.refptr` COMDATs.
+3. **Dependency-only refresh** – If you are updating Snappy/Zstd/LZ4/BZip2/Zlib
+   independently, invoke `./buildDependencies.sh --output-dir build/lib/mingw_x86_64`
+   (or `mingw_arm64`). The script now scans each produced archive, rewrites any
+   `.rdata$.refptr.*` sections, and refuses to continue if validation detects a
+   lingering COMDAT. The resulting dependencies are safe to link into
+   Kotlin/Native binaries. Should you subsequently package those outputs
+   manually, rerunning the sanitiser on the destination directory is
+   recommended (the helper is idempotent).
+
+In every workflow the fix runs automatically; no manual flags are necessary as
+long as the relevant binutils (`objdump`, `objcopy`, and `ar`) are on `PATH`
+(either from `llvm-mingw` or GNU Binutils).
+
+## Manual verification tips
+
+If you want to double-check a library manually, use:
+
+```bash
+objdump -h build/lib/mingw_x86_64/libsnappy.a | grep '\.refptr'
+```
+
+The sections should now be named `.rdata$refptr_*`. The automated validation
+steps in the build scripts perform the same check and fail early if any
+`.rdata$.refptr.*` symbols remain. You can apply the same command to archives in
+`build/lib/mingw_*` or to the unpacked contents of
+`build/archives/rocksdb-mingw-*.zip` to confirm the delivered artefacts are
+clean.
+
+For automated validation you can also call the helper script, which reuses the
+same verification logic as the build and fails if any legacy COMDAT sections
+are detected. The helper now also reports a failure when the requested
+directory does not exist or no static libraries are present, making it obvious
+when the MinGW build did not produce the expected artefacts:
+
+```bash
+./scripts/verify-mingw-refptr.sh build/lib/mingw_x86_64 x86_64-w64-mingw32
+```

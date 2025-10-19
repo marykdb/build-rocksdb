@@ -2,6 +2,76 @@
 
 # Common helper functions shared across build scripts for RocksDB.
 
+BUILD_COMMON_VALIDATED_MINGW_ROOTS=""
+BUILD_COMMON_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_COMMON_MINGW_SANITIZER_LOADED=0
+
+build_common::load_mingw_sanitizer() {
+  if (( BUILD_COMMON_MINGW_SANITIZER_LOADED )); then
+    return 0
+  fi
+  local sanitizer_script="${BUILD_COMMON_DIR}/scripts/build-rocksdb-mingw-sanitize.sh"
+  if [[ ! -f "$sanitizer_script" ]]; then
+    echo "❌ Missing MinGW sanitizer helpers at ${sanitizer_script}" >&2
+    return 1
+  fi
+  # shellcheck source=./scripts/build-rocksdb-mingw-sanitize.sh
+  source "$sanitizer_script"
+  BUILD_COMMON_MINGW_SANITIZER_LOADED=1
+}
+
+build_common::coff_replace_section_name() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::coff_replace_section_name "$@"
+}
+
+build_common::ar_extract_output_is_symbol_warning() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::ar_extract_output_is_symbol_warning "$@"
+}
+
+build_common::mingw_binutils_candidates() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::mingw_binutils_candidates "$@"
+}
+
+build_common::resolve_mingw_binutils() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::resolve_mingw_binutils "$@"
+}
+
+build_common::mitigate_mingw_refptr_comdats() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::mitigate_mingw_refptr_comdats "$@"
+}
+
+build_common::verify_mingw_refptr_sections_rewritten() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::verify_mingw_refptr_sections_rewritten "$@"
+}
+
+build_common::sanitize_mingw_archives_in_tree() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::sanitize_mingw_archives_in_tree "$@"
+}
+
+build_common::assert_mingw_archives_sanitized() {
+  build_common::load_mingw_sanitizer || return 1
+  build_common_mingw::assert_mingw_archives_sanitized "$@"
+}
+
+build_common::is_mingw_triple() {
+  local triple="${1:-}"
+  if [[ -z "$triple" ]]; then
+    return 1
+  fi
+  case "$triple" in
+    *-w64-mingw32*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+
 build_common::append_unique_flag() {
   local var_name="$1"
   local flag="$2"
@@ -143,6 +213,26 @@ build_common::append_unique_array_flag() {
   # shellcheck disable=SC1083
   eval "${array_name}+=(\"\$flag\")"
 }
+
+build_common::find_tool() {
+  if (( $# == 0 )); then
+    return 1
+  fi
+
+  local candidate
+  for candidate in "$@"; do
+    if [[ -z "$candidate" ]]; then
+      continue
+    fi
+    if command -v "$candidate" >/dev/null 2>&1; then
+      printf '%s' "$candidate"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 
 build_common::read_cmake_version() {
   if [[ -n "${BUILD_COMMON_CMAKE_VERSION_AVAILABLE:-}" ]]; then
@@ -299,6 +389,24 @@ build_common::detect_llvm_mingw_root() {
     candidate_bins+=("$clang_dir")
   fi
 
+  if command -v brew >/dev/null 2>&1; then
+    local brew_prefix
+    local brew_formula
+    for brew_formula in llvm-mingw mingw-w64; do
+      brew_prefix="$(brew --prefix "${brew_formula}" 2>/dev/null || true)"
+      if [[ -z "$brew_prefix" ]]; then
+        continue
+      fi
+      if [[ -d "${brew_prefix}/${triple}" ]]; then
+        export LLVM_MINGW_ROOT="$brew_prefix"
+        return 0
+      fi
+      if [[ -d "${brew_prefix}/bin" ]]; then
+        candidate_bins+=("${brew_prefix}/bin")
+      fi
+    done
+  fi
+
   local bin_dir
   for bin_dir in "${candidate_bins[@]}"; do
     [[ -z "$bin_dir" ]] && continue
@@ -313,7 +421,7 @@ build_common::detect_llvm_mingw_root() {
   return 0
 }
 
-build_common::prefer_llvm_mingw_sysroot() { 
+build_common::prefer_llvm_mingw_sysroot() {
   local triple="$1"
 
   if [[ -z "${LLVM_MINGW_ROOT:-}" || -z "$triple" ]]; then
@@ -409,6 +517,25 @@ build_common::discover_mingw_sysroot() {
 
   candidates+=("/usr/${triple}")
   candidates+=("/opt/${triple}")
+
+  if command -v brew >/dev/null 2>&1; then
+    local brew_prefix
+    local brew_formula
+    local triple_arch
+    triple_arch="${triple%%-*}"
+    for brew_formula in mingw-w64 llvm-mingw; do
+      brew_prefix="$(brew --prefix "${brew_formula}" 2>/dev/null || true)"
+      if [[ -z "$brew_prefix" ]]; then
+        continue
+      fi
+      candidates+=("${brew_prefix}")
+      candidates+=("${brew_prefix}/${triple}")
+      if [[ -n "$triple_arch" ]]; then
+        candidates+=("${brew_prefix}/toolchain-${triple_arch}")
+        candidates+=("${brew_prefix}/toolchain-${triple_arch}/${triple}")
+      fi
+    done
+  fi
 
   local -a msys_prefixes=(/mingw64 /ucrt64 /clang64 /mingw32 /opt/mingw /opt/llvm-mingw)
   local prefix
@@ -801,31 +928,15 @@ build_common::cmake_configure() {
 
   local -a common_args=(
     -DCMAKE_PREFIX_PATH="$snappy_prefix"
-    -DSnappy_DIR="$snappy_cmake_dir"
     -DCMAKE_INCLUDE_PATH="${dependency_include_root};${dependency_headers_dir}"
     -DCMAKE_LIBRARY_PATH="$dependency_lib_dir"
-    -DZLIB_INCLUDE_DIR="$dependency_headers_dir"
-    -DZLIB_LIBRARY="${dependency_lib_dir}/libz.a"
-    -DZLIB_USE_STATIC_LIBS=ON
-    -DBZIP2_INCLUDE_DIR="$dependency_headers_dir"
-    -DBZIP2_LIBRARIES="${dependency_lib_dir}/libbz2.a"
-    -Dlz4_INCLUDE_DIRS="$dependency_headers_dir"
-    -Dlz4_LIBRARIES="${dependency_lib_dir}/liblz4.a"
-    -DZSTD_INCLUDE_DIRS="$dependency_headers_dir"
-    -DZSTD_LIBRARIES="${dependency_lib_dir}/libzstd.a"
     -DCMAKE_C_FLAGS="$extra_c_flags"
     -DCMAKE_CXX_FLAGS="$extra_cxx_flags"
     -DCMAKE_BUILD_TYPE=Release
     -DCMAKE_INSTALL_PREFIX="$build_dir"
     -DPORTABLE=1
     -DWITH_GFLAGS=OFF
-    -DWITH_SNAPPY=ON
-    -DWITH_LZ4=ON
-    -DWITH_ZLIB=ON
-    -DWITH_ZSTD=ON
-    -DWITH_BZ2=ON
     -DROCKSDB_BUILD_SHARED=OFF
-    -DROCKSDB_BUILD_STATIC=ON
     -DWITH_TESTS=OFF
     -DWITH_BENCHMARK_TOOLS=OFF
     -DWITH_TOOLS=OFF
