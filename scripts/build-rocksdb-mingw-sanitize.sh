@@ -19,13 +19,86 @@ BUILD_COMMON_MINGW_BINUTILS_AR="${BUILD_COMMON_MINGW_BINUTILS_AR:-}"
 BUILD_COMMON_MINGW_BINUTILS_RANLIB="${BUILD_COMMON_MINGW_BINUTILS_RANLIB:-}"
 
 if ! declare -p BUILD_COMMON_MINGW_BINUTILS_OBJCOPY >/dev/null 2>&1; then
-  declare -a BUILD_COMMON_MINGW_BINUTILS_OBJCOPY=()
+  declare -ag BUILD_COMMON_MINGW_BINUTILS_OBJCOPY=()
 fi
 if ! declare -p BUILD_COMMON_MINGW_SANITIZED_STATUS >/dev/null 2>&1; then
-  declare -A BUILD_COMMON_MINGW_SANITIZED_STATUS=()
+  declare -Ag BUILD_COMMON_MINGW_SANITIZED_STATUS=()
 fi
 
-build_common::mingw_binutils_candidates() {
+build_common_mingw::coff_replace_section_name() {
+  local object_file="$1"
+  local old_name="$2"
+  local new_name="$3"
+
+  if [[ -z "$object_file" || -z "$old_name" || -z "$new_name" ]]; then
+    return 1
+  fi
+
+  local python_bin=""
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin="python3"
+  elif command -v python >/dev/null 2>&1; then
+    python_bin="python"
+  else
+    echo "❌ Unable to locate python interpreter to rewrite COFF section names" >&2
+    return 1
+  fi
+
+  "$python_bin" - "$object_file" "$old_name" "$new_name" <<'PY'
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+old = sys.argv[2].encode('ascii')
+new = sys.argv[3].encode('ascii')
+
+needle = old + b'\x00'
+if len(new) > len(old):
+    sys.stderr.write("replacement name longer than original\n")
+    sys.exit(1)
+
+data = path.read_bytes()
+count = data.count(needle)
+if count == 0:
+    sys.stderr.write("section name not found in object\n")
+    sys.exit(1)
+
+replacement = new + b'\x00'
+if len(new) < len(old):
+    replacement += b'\x00' * (len(old) - len(new))
+
+data = data.replace(needle, replacement)
+path.write_bytes(data)
+PY
+}
+
+build_common_mingw::ar_extract_output_is_symbol_warning() {
+  local output="$1"
+  local line
+  local recognized=0
+
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    case "$line" in
+      *"illegal output pathname for archive member: /"*|\
+      *"illegal output pathname for archive member: //"*|\
+      "No such file or directory")
+        recognized=1
+        continue
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done <<<"$output"
+
+  if (( recognized )); then
+    return 0
+  fi
+  return 1
+}
+
+build_common_mingw::mingw_binutils_candidates() {
   local preferred_triple="${1:-}"
 
   local -n _objdump_candidates_ref="$2"
@@ -59,7 +132,7 @@ build_common::mingw_binutils_candidates() {
   _ranlib_candidates_ref+=(llvm-ranlib ranlib)
 }
 
-build_common::resolve_mingw_binutils() {
+build_common_mingw::resolve_mingw_binutils() {
   local preferred_triple="${1:-}"
   local cache_key="${preferred_triple:-__default__}"
 
@@ -71,7 +144,7 @@ build_common::resolve_mingw_binutils() {
   local -a objcopy_candidates=()
   local -a ar_candidates=()
   local -a ranlib_candidates=()
-  build_common::mingw_binutils_candidates "$preferred_triple" objdump_candidates objcopy_candidates ar_candidates ranlib_candidates
+  build_common_mingw::mingw_binutils_candidates "$preferred_triple" objdump_candidates objcopy_candidates ar_candidates ranlib_candidates
 
   local objdump_bin=""
   local ar_bin=""
@@ -139,7 +212,7 @@ build_common::resolve_mingw_binutils() {
   return 0
 }
 
-build_common::is_mingw_triple() {
+build_common_mingw::is_mingw_triple() {
   local triple="${1:-}"
   if [[ -z "$triple" ]]; then
     return 1
@@ -151,7 +224,7 @@ build_common::is_mingw_triple() {
   esac
 }
 
-build_common::mitigate_mingw_refptr_comdats() {
+build_common_mingw::mitigate_mingw_refptr_comdats() {
   local archive="$1"
   local preferred_triple="${2:-}"
 
@@ -163,7 +236,7 @@ build_common::mitigate_mingw_refptr_comdats() {
     return 0
   fi
 
-  if ! build_common::resolve_mingw_binutils "$preferred_triple"; then
+  if ! build_common_mingw::resolve_mingw_binutils "$preferred_triple"; then
     return 1
   fi
 
@@ -264,30 +337,26 @@ build_common::mitigate_mingw_refptr_comdats() {
       rm -rf "$tmpdir"
     fi
   }
-  trap cleanup EXIT
+  trap cleanup RETURN
 
   local archive_tmp
   archive_tmp="${tmpdir}/${archive_base}"
   cp "$archive_abs" "$archive_tmp"
 
-  local -a extraction_output=()
-  local extract_status=0
-  if ! extraction_output=("$ar_bin" x "$archive_tmp" 2>&1); then
-    extract_status=$?
-  fi
-
-  if (( extract_status != 0 )); then
-    local extracted_warning_output="${extraction_output[*]}"
-    if build_common::ar_extract_output_is_symbol_warning "$extracted_warning_output"; then
+  local extraction_output=""
+  if ! extraction_output="$( (cd "$tmpdir" && "$ar_bin" x "$archive_tmp") 2>&1 )"; then
+    local extract_status=$?
+    local extracted_warning_output="${extraction_output}"
+    if build_common_mingw::ar_extract_output_is_symbol_warning "$extracted_warning_output"; then
       echo "ℹ️  Retrying extraction of ${archive_base} with alternative tool" >&2
       objcopy_index=$(((objcopy_index + 1) % ${#objcopy_bins[@]}))
       objcopy_bin="${objcopy_bins[$objcopy_index]}"
-      if ! extraction_output=("$objcopy_bin" --extract-symbol "$archive_abs" 2>&1); then
-        echo "❌  Failed to extract archive ${archive_abs}: ${extraction_output[*]}" >&2
+      if ! extraction_output="$((cd "$tmpdir" && "$objcopy_bin" --extract-symbol "$archive_tmp") 2>&1)"; then
+        echo "❌  Failed to extract archive ${archive_abs}: ${extraction_output}" >&2
         return 1
       fi
     else
-      echo "❌  Failed to extract archive ${archive_abs}: ${extraction_output[*]}" >&2
+      echo "❌  Failed to extract archive ${archive_abs}: ${extraction_output}" >&2
       return 1
     fi
   fi
@@ -309,7 +378,7 @@ build_common::mitigate_mingw_refptr_comdats() {
     local section
     for section in "${sections[@]}"; do
       local sanitized="${section/.refptr/.refptr.lld}"
-      if build_common::coff_replace_section_name "$member_path" "$section" "$sanitized"; then
+      if build_common_mingw::coff_replace_section_name "$member_path" "$section" "$sanitized"; then
         renamed_sections=$((renamed_sections + 1))
       else
         echo "⚠️  [MinGW] Failed to rewrite section ${section} in ${member}" >&2
@@ -337,7 +406,7 @@ build_common::mitigate_mingw_refptr_comdats() {
   return 0
 }
 
-build_common::verify_mingw_refptr_sections_rewritten() {
+build_common_mingw::verify_mingw_refptr_sections_rewritten() {
   local archive="$1"
   local preferred_triple="${2:-}"
 
@@ -349,7 +418,7 @@ build_common::verify_mingw_refptr_sections_rewritten() {
     return 0
   fi
 
-  if ! build_common::resolve_mingw_binutils "$preferred_triple"; then
+  if ! build_common_mingw::resolve_mingw_binutils "$preferred_triple"; then
     return 1
   fi
 
@@ -392,7 +461,7 @@ build_common::verify_mingw_refptr_sections_rewritten() {
   return 0
 }
 
-build_common::sanitize_mingw_archives_in_tree() {
+build_common_mingw::sanitize_mingw_archives_in_tree() {
   local root_dir="$1"
   local preferred_triple="${2:-}"
 
@@ -435,7 +504,7 @@ build_common::sanitize_mingw_archives_in_tree() {
   local overall_status=0
   local -a verification_targets=()
   for archive in "${archives[@]}"; do
-    if ! build_common::mitigate_mingw_refptr_comdats "$archive" "$preferred_triple"; then
+    if ! build_common_mingw::mitigate_mingw_refptr_comdats "$archive" "$preferred_triple"; then
       overall_status=1
       continue
     fi
@@ -453,7 +522,7 @@ build_common::sanitize_mingw_archives_in_tree() {
   done
 
   for archive in "${verification_targets[@]}"; do
-    if ! build_common::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
+    if ! build_common_mingw::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
       overall_status=1
     fi
   done
@@ -465,7 +534,7 @@ build_common::sanitize_mingw_archives_in_tree() {
   return $overall_status
 }
 
-build_common::assert_mingw_archives_sanitized() {
+build_common_mingw::assert_mingw_archives_sanitized() {
   local root_dir="$1"
   local preferred_triple="${2:-}"
 
@@ -520,7 +589,7 @@ build_common::assert_mingw_archives_sanitized() {
 
   local archive
   for archive in "${archives[@]}"; do
-    if ! build_common::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
+    if ! build_common_mingw::verify_mingw_refptr_sections_rewritten "$archive" "$preferred_triple"; then
       return 1
     fi
   done

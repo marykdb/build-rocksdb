@@ -1129,8 +1129,8 @@ else
 fi
 
 if is_mingw_build; then
-  # shellcheck source=./build-rocksdb-mingw-sanitize.sh
-  source "${SCRIPT_DIR}/build-rocksdb-mingw-sanitize.sh"
+  # shellcheck source=./scripts/build-rocksdb-mingw-sanitize.sh
+  source "${SCRIPT_DIR}/scripts/build-rocksdb-mingw-sanitize.sh"
   if [[ "${SKIP_MINGW_SANITIZE:-0}" == "1" ]]; then
     echo "⚠️  Skipping MinGW archive sanitization because SKIP_MINGW_SANITIZE=${SKIP_MINGW_SANITIZE}"
   else
