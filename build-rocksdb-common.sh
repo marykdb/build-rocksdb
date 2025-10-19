@@ -438,6 +438,8 @@ build_common::mitigate_mingw_refptr_comdats() {
     local modified=0
     local renamed_sections=0
     local logged=0
+    local total_members=${#object_members[@]}
+    local processed_members=0
 
     for idx in "${!object_members[@]}"; do
       member="${object_members[idx]}"
@@ -445,6 +447,7 @@ build_common::mitigate_mingw_refptr_comdats() {
       if [[ ! -f "$temp_file" ]]; then
         continue
       fi
+      ((processed_members++))
       sections=()
       while IFS= read -r section_line; do
         sections+=("$section_line")
@@ -457,6 +460,7 @@ build_common::mitigate_mingw_refptr_comdats() {
         echo "🔧 [MinGW] rewriting refptr COMDATs in ${archive_abs}" >&2
         logged=1
       fi
+      printf '     -> [%d/%d] %s (%d sections)\n' "$processed_members" "$total_members" "$member" "${#sections[@]}" >&2
       local section
       for section in "${sections[@]}"; do
         local new_name="$section"
@@ -1504,18 +1508,8 @@ build_common::cmake_configure() {
 
   local -a common_args=(
     -DCMAKE_PREFIX_PATH="$snappy_prefix"
-    -DSnappy_DIR="$snappy_cmake_dir"
     -DCMAKE_INCLUDE_PATH="${dependency_include_root};${dependency_headers_dir}"
     -DCMAKE_LIBRARY_PATH="$dependency_lib_dir"
-    -DZLIB_INCLUDE_DIR="$dependency_headers_dir"
-    -DZLIB_LIBRARY="${dependency_lib_dir}/libz.a"
-    -DZLIB_USE_STATIC_LIBS=ON
-    -DBZIP2_INCLUDE_DIR="$dependency_headers_dir"
-    -DBZIP2_LIBRARIES="${dependency_lib_dir}/libbz2.a"
-    -Dlz4_INCLUDE_DIRS="$dependency_headers_dir"
-    -Dlz4_LIBRARIES="${dependency_lib_dir}/liblz4.a"
-    -DZSTD_INCLUDE_DIRS="$dependency_headers_dir"
-    -DZSTD_LIBRARIES="${dependency_lib_dir}/libzstd.a"
     -DCMAKE_C_FLAGS="$extra_c_flags"
     -DCMAKE_CXX_FLAGS="$extra_cxx_flags"
     -DCMAKE_BUILD_TYPE=Release
@@ -1523,7 +1517,6 @@ build_common::cmake_configure() {
     -DPORTABLE=1
     -DWITH_GFLAGS=OFF
     -DROCKSDB_BUILD_SHARED=OFF
-    -DROCKSDB_BUILD_STATIC=ON
     -DWITH_TESTS=OFF
     -DWITH_BENCHMARK_TOOLS=OFF
     -DWITH_TOOLS=OFF
@@ -1531,8 +1524,6 @@ build_common::cmake_configure() {
     -DWITH_JEMALLOC=OFF
     -DFAIL_ON_WARNINGS=OFF
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-    -DROCKSDB_DLL=ON
-    -DROCKSDB_LIBRARY_EXPORTS=ON
   )
 
   if [[ -n "${MINGW_INCLUDE_DIRECTORIES:-}" ]]; then

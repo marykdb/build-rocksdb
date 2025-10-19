@@ -154,107 +154,70 @@ jobs:
       - name: Install build dependencies
         run: |
           choco install -y ninja 7zip
-      - name: Install LLVM MinGW toolchain
+      - name: Provision JetBrains MSYS2 toolchain
         run: |
           set -euo pipefail
-          LLVM_MINGW_VERSION=20241030
-          LLVM_MINGW_DIST="llvm-mingw-${LLVM_MINGW_VERSION}-msvcrt-x86_64"
-          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
-          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-          curl --fail --location --silent --show-error \
-            "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}" \
-            --output "$ARCHIVE_PATH"
           TOOLCHAIN_DIR="$PWD/toolchains"
-          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          mkdir -p "$TOOLCHAIN_DIR"
-          7z x "$ARCHIVE_PATH" -o"$TOOLCHAIN_DIR" >/dev/null
+          JB_ARCHIVE="msys2-mingw-w64-x86_64-2.zip"
+          JB_URL="https://download.jetbrains.com/kotlin/native/${JB_ARCHIVE}"
+          ARCHIVE_PATH="$PWD/${JB_ARCHIVE}"
+          curl --fail --location --silent --show-error "$JB_URL" --output "$ARCHIVE_PATH"
+          JB_ROOT="$TOOLCHAIN_DIR/jetbrains-msys2"
+          rm -rf "$JB_ROOT"
+          mkdir -p "$JB_ROOT"
+          7z x "$ARCHIVE_PATH" -o"$JB_ROOT" >/dev/null
           rm -f "$ARCHIVE_PATH"
-          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
-            echo "Expected LLVM MinGW root $LLVM_MINGW_ROOT not found" >&2
+          SYSROOT="$JB_ROOT/msys2-mingw-w64-x86_64-2"
+          if [[ ! -d "$SYSROOT/include" ]]; then
+            echo "Failed to locate JetBrains sysroot includes at $SYSROOT" >&2
             exit 1
           fi
           if command -v cygpath >/dev/null 2>&1; then
-            LLVM_MINGW_ROOT_UNIX="$(cygpath -u "$LLVM_MINGW_ROOT")"
-            LLVM_MINGW_BIN_UNIX="$(cygpath -u "$LLVM_MINGW_ROOT/bin")"
+            SYSROOT_UNIX="$(cygpath -u "$SYSROOT")"
+            TRIPLE_BIN_UNIX="$(cygpath -u "$SYSROOT/x86_64-w64-mingw32/bin")"
+            POSIX_BIN_UNIX="$(cygpath -u "$SYSROOT/bin")"
           else
-            LLVM_MINGW_ROOT_UNIX="$LLVM_MINGW_ROOT"
-            LLVM_MINGW_BIN_UNIX="$LLVM_MINGW_ROOT/bin"
+            SYSROOT_UNIX="$SYSROOT"
+            TRIPLE_BIN_UNIX="$SYSROOT/x86_64-w64-mingw32/bin"
+            POSIX_BIN_UNIX="$SYSROOT/bin"
           fi
-          printf '%s\n' "$LLVM_MINGW_BIN_UNIX" >> "$GITHUB_PATH"
-          printf 'LLVM_MINGW_ROOT=%s\n' "${LLVM_MINGW_ROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-
-      - name: Provision GCC runtime for libstdc++
-        run: |
-          set -euo pipefail
-          RUNTIME_ARCHIVE="msys2-mingw-w64-x86_64-2.zip"
-          RUNTIME_URL="https://download.jetbrains.com/kotlin/native/${RUNTIME_ARCHIVE}"
-          ARCHIVE_PATH="$PWD/${RUNTIME_ARCHIVE}"
-          curl --fail --location --silent --show-error \
-            "$RUNTIME_URL" \
-            --output "$ARCHIVE_PATH"
-          RUNTIME_ROOT="$PWD/toolchains/jetbrains-msys2"
-          rm -rf "$RUNTIME_ROOT"
-          mkdir -p "$RUNTIME_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$RUNTIME_ROOT" >/dev/null
-          rm -f "$ARCHIVE_PATH"
-          SYSROOT_CANDIDATE="$RUNTIME_ROOT/msys2-mingw-w64-x86_64-2"
-          if [[ ! -d "$SYSROOT_CANDIDATE/include" ]]; then
-            echo "Failed to locate JetBrains sysroot includes at $SYSROOT_CANDIDATE" >&2
-            exit 1
-          fi
-          if command -v cygpath >/dev/null 2>&1; then
-            SYSROOT_UNIX="$(cygpath -u "$SYSROOT_CANDIDATE")"
-            SYSROOT_PARENT_UNIX="$(cygpath -u "${SYSROOT_CANDIDATE}/.." 2>/dev/null || true)"
+          CC_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc.exe"
+          CXX_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-g++.exe"
+          AR_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc-ar.exe"
+          RANLIB_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc-ranlib.exe"
+          STRIP_PATH="$TRIPLE_BIN_UNIX/strip.exe"
+          NM_PATH="$TRIPLE_BIN_UNIX/x86_64-w64-mingw32-gcc-nm.exe"
+          OBJCOPY_PATH="$TRIPLE_BIN_UNIX/objcopy.exe"
+          OBJDUMP_PATH="$TRIPLE_BIN_UNIX/objdump.exe"
+          if [[ -x "$TRIPLE_BIN_UNIX/windres.exe" ]]; then
+            RC_PATH="$TRIPLE_BIN_UNIX/windres.exe"
           else
-            SYSROOT_UNIX="$SYSROOT_CANDIDATE"
-            SYSROOT_PARENT_UNIX="${SYSROOT_CANDIDATE}/.."
+            RC_PATH="$POSIX_BIN_UNIX/windres.exe"
           fi
-          printf 'MINGW_SYSROOT=%s\n' "${SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-          printf 'MINGW_GCC92_SYSROOT=%s\n' "${SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV" # legacy var consumers expect GCC 9.x sysroot here
-          if [[ -n "$SYSROOT_PARENT_UNIX" && "$SYSROOT_PARENT_UNIX" != "$SYSROOT_UNIX" ]]; then
-            printf 'MINGW_FALLBACK_SYSROOT=%s\n' "${SYSROOT_PARENT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-          fi
-      - name: Provision alternate GCC for bzip2
-        run: |
-          set -euo pipefail
-          GCC9_VERSION=9.5.0
-          WINLIBS_RELEASE="9.5.0-10.0.0-msvcrt-r1"
-          ARCHIVE_NAME="winlibs-x86_64-posix-seh-gcc-${GCC9_VERSION}-mingw-w64msvcrt-10.0.0-r1.zip"
-          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-          curl --fail --location --silent --show-error \
-            "https://github.com/brechtsanders/winlibs_mingw/releases/download/${WINLIBS_RELEASE}/${ARCHIVE_NAME}" \
-            --output "$ARCHIVE_PATH"
-          TOOLCHAIN_DIR="$PWD/toolchains"
-          ALT_ROOT="$TOOLCHAIN_DIR/winlibs-gcc-${GCC9_VERSION}"
-          rm -rf "$ALT_ROOT"
-          mkdir -p "$ALT_ROOT"
-          7z x "$ARCHIVE_PATH" -o"$ALT_ROOT" >/dev/null
-          rm -f "$ARCHIVE_PATH"
-          if [[ -d "$ALT_ROOT/mingw64" ]]; then
-            ALT_SYSROOT="$ALT_ROOT/mingw64"
-          else
-            ALT_SYSROOT="$(find "$ALT_ROOT" -maxdepth 2 -type d -name 'mingw64' | head -n 1)"
-          fi
-          if [[ -z "$ALT_SYSROOT" ]]; then
-            echo "Failed to locate mingw64 sysroot from alternate GCC toolchain" >&2
-            exit 1
-          fi
-          ALT_SYSROOT="$(cd "$ALT_SYSROOT" && pwd)"
-          ALT_BIN_DIR="$ALT_SYSROOT/bin"
-          if [[ ! -d "$ALT_BIN_DIR" ]]; then
-            echo "Failed to locate alternate GCC bin directory" >&2
-            exit 1
-          fi
-          if command -v cygpath >/dev/null 2>&1; then
-            ALT_SYSROOT_UNIX="$(cygpath -u "$ALT_SYSROOT")"
-            ALT_BIN_UNIX="$(cygpath -u "$ALT_BIN_DIR")"
-          else
-            ALT_SYSROOT_UNIX="$ALT_SYSROOT"
-            ALT_BIN_UNIX="$ALT_BIN_DIR"
-          fi
-          echo "BZIP2_GCC_SYSROOT=${ALT_SYSROOT_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
-          echo "BZIP2_GCC_BIN_DIR=${ALT_BIN_UNIX//\\/\\\\}" >> "$GITHUB_ENV"
+          {
+            echo "MINGW_TRIPLE=x86_64-w64-mingw32"
+            echo "MINGW_SYSROOT=$SYSROOT_UNIX"
+            echo "MINGW_GCC92_SYSROOT=$SYSROOT_UNIX"
+            echo "MINGW_FALLBACK_SYSROOT=$SYSROOT_UNIX"
+            echo "JB_MSYS2_TRIPLE_BIN=$TRIPLE_BIN_UNIX"
+            echo "JB_MSYS2_BIN=$POSIX_BIN_UNIX"
+            echo "CC=$CC_PATH"
+            echo "CXX=$CXX_PATH"
+            echo "AR=$AR_PATH"
+            echo "RANLIB=$RANLIB_PATH"
+            echo "STRIP=$STRIP_PATH"
+            echo "NM=$NM_PATH"
+            echo "OBJCOPY=$OBJCOPY_PATH"
+            echo "OBJDUMP=$OBJDUMP_PATH"
+            echo "RC=$RC_PATH"
+            echo "CMAKE_AR=$AR_PATH"
+            echo "CMAKE_RANLIB=$RANLIB_PATH"
+            echo "CMAKE_NM=$NM_PATH"
+            echo "CMAKE_OBJCOPY=$OBJCOPY_PATH"
+            echo "CMAKE_OBJDUMP=$OBJDUMP_PATH"
+          } >> "$GITHUB_ENV"
+          echo "$TRIPLE_BIN_UNIX" >> "$GITHUB_PATH"
+          echo "$POSIX_BIN_UNIX" >> "$GITHUB_PATH"
       - name: Build Windows MinGW package
         run: ./build.sh mingwX64
       - name: Verify libstdc++ usage in MinGW build
@@ -268,14 +231,13 @@ jobs:
             echo "Failed to locate built librocksdb.a in expected directories" >&2
             exit 1
           fi
-          NM_BIN="x86_64-w64-mingw32-nm"
+          NM_BIN="x86_64-w64-mingw32-gcc-nm.exe"
           if ! command -v "$NM_BIN" >/dev/null 2>&1; then
-            if command -v llvm-nm >/dev/null 2>&1; then
-              NM_BIN="llvm-nm"
-            else
-              echo "Error: Unable to locate an nm tool for inspection" >&2
-              exit 1
-            fi
+            NM_BIN="gcc-nm"
+          fi
+          if ! command -v "$NM_BIN" >/dev/null 2>&1; then
+            echo "Error: Unable to locate an nm tool for inspection" >&2
+            exit 1
           fi
           if "$NM_BIN" -C "$LIB_PATH" | grep -q "std::__1::"; then
             echo "Error: Detected libc++ symbols (std::__1) in librocksdb.a. Expected libstdc++." >&2
@@ -287,56 +249,6 @@ jobs:
         with:
           name: rocksdb-mingw-x86_64
           path: build/archives/rocksdb-mingw-x86_64.zip
-
-#  mingw-arm64:
-#    name: Windows (MinGW) ARM64
-#    runs-on: windows-2022
-#    defaults:
-#      run:
-#        shell: bash
-#    steps:
-#      - uses: actions/checkout@v4
-#        with:
-#          submodules: true
-#          ref: ${{ github.sha }}
-#          fetch-depth: 0
-#      - name: Install build dependencies
-#        run: |
-#          choco install -y make ninja
-#      - name: Install LLVM MinGW toolchain
-#        run: |
-#          set -euo pipefail
-#          LLVM_MINGW_VERSION=20241030
-#          LLVM_MINGW_DIST=llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-x86_64
-#          ARCHIVE_NAME="${LLVM_MINGW_DIST}.zip"
-#          ARCHIVE_PATH="$PWD/${ARCHIVE_NAME}"
-#          curl -sSL -o "$ARCHIVE_PATH" "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${ARCHIVE_NAME}"
-#          TOOLCHAIN_DIR="$PWD/toolchains"
-#          mkdir -p "$TOOLCHAIN_DIR"
-#          rm -rf "$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-#          python - "$ARCHIVE_PATH" "$TOOLCHAIN_DIR" <<'PY'
-#          import pathlib, sys, zipfile
-#
-#          archive = pathlib.Path(sys.argv[1])
-#          dest = pathlib.Path(sys.argv[2])
-#          dest.mkdir(parents=True, exist_ok=True)
-#          with zipfile.ZipFile(archive) as zf:
-#              zf.extractall(dest)
-#          PY
-#          rm -f "$ARCHIVE_PATH"
-#          LLVM_MINGW_ROOT="$TOOLCHAIN_DIR/${LLVM_MINGW_DIST}"
-#          if [[ ! -d "$LLVM_MINGW_ROOT" ]]; then
-#            echo "Expected toolchain directory $LLVM_MINGW_ROOT not found" >&2
-#            exit 1
-#          fi
-#          echo "LLVM_MINGW_ROOT=$LLVM_MINGW_ROOT" >> "$GITHUB_ENV"
-#          echo "$LLVM_MINGW_ROOT/bin" >> "$GITHUB_PATH"
-#      - name: Build Windows ARM64 MinGW package
-#        run: ./build.sh mingwArm64
-#      - uses: actions/upload-artifact@v4
-#        with:
-#          name: rocksdb-mingw-arm64
-#          path: build/archives/rocksdb-mingw-arm64.zip
 
   macos-x64:
     name: macOS x86_64
