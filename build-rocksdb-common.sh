@@ -2,6 +2,8 @@
 
 # Common helper functions shared across build scripts for RocksDB.
 
+BUILD_COMMON_VALIDATED_MINGW_ROOTS=""
+
 build_common::append_unique_flag() {
   local var_name="$1"
   local flag="$2"
@@ -301,15 +303,11 @@ build_common::mitigate_mingw_refptr_comdats() {
   build_common::mingw_binutils_candidates "$preferred_triple" objdump_candidates objcopy_candidates ar_candidates ranlib_candidates
 
   local objdump_bin=""
-  local objcopy_bin=""
   local ar_bin=""
   local ranlib_bin=""
 
   if ! objdump_bin="$(build_common::find_tool "${objdump_candidates[@]}")"; then
     objdump_bin=""
-  fi
-  if ! objcopy_bin="$(build_common::find_tool "${objcopy_candidates[@]}")"; then
-    objcopy_bin=""
   fi
   if ! ar_bin="$(build_common::find_tool "${ar_candidates[@]}")"; then
     ar_bin=""
@@ -318,10 +316,55 @@ build_common::mitigate_mingw_refptr_comdats() {
     ranlib_bin=""
   fi
 
-  if [[ -z "$objdump_bin" || -z "$objcopy_bin" || -z "$ar_bin" ]]; then
+  local -a objcopy_bins=()
+  if [[ -n "${OBJCOPY:-}" ]]; then
+    local objcopy_env="${OBJCOPY%% *}"
+    if [[ -x "$objcopy_env" ]]; then
+      objcopy_bins+=("$objcopy_env")
+    fi
+  fi
+  if [[ -n "${LLVM_MINGW_ROOT:-}" ]]; then
+    local llvm_objcopy_path=""
+    for candidate in "${LLVM_MINGW_ROOT}/bin/llvm-objcopy" "${LLVM_MINGW_ROOT}/bin/llvm-objcopy.exe"; do
+      if [[ -x "$candidate" ]]; then
+        llvm_objcopy_path="$candidate"
+        break
+      fi
+    done
+    if [[ -n "$llvm_objcopy_path" ]]; then
+      objcopy_bins+=("$llvm_objcopy_path")
+    fi
+  fi
+  local candidate resolved
+  for candidate in "${objcopy_candidates[@]}"; do
+    if [[ -z "$candidate" ]]; then
+      continue
+    fi
+    resolved="$(command -v "$candidate" 2>/dev/null || true)"
+    if [[ -n "$resolved" ]]; then
+      objcopy_bins+=("$resolved")
+    fi
+  done
+
+  if (( ${#objcopy_bins[@]} )); then
+    local -a deduped=()
+    declare -A objcopy_seen=()
+    for resolved in "${objcopy_bins[@]}"; do
+      if [[ -z "${objcopy_seen[$resolved]:-}" ]]; then
+        deduped+=("$resolved")
+        objcopy_seen[$resolved]=1
+      fi
+    done
+    objcopy_bins=("${deduped[@]}")
+  fi
+
+  if [[ -z "$objdump_bin" || ${#objcopy_bins[@]} == 0 || -z "$ar_bin" ]]; then
     echo "❌ Unable to sanitize MinGW archive ${archive}: required binutils not found" >&2
     return 1
   fi
+
+  local objcopy_index=0
+  local objcopy_bin="${objcopy_bins[$objcopy_index]}"
 
   local archive_dir archive_base archive_abs
   archive_dir="$(cd "$(dirname "$archive")" 2>/dev/null && pwd 2>/dev/null)"
@@ -345,10 +388,14 @@ build_common::mitigate_mingw_refptr_comdats() {
   }
 
   local -a members=()
-  if ! mapfile -t members < <("$ar_bin" t "$archive_abs" 2>/dev/null); then
+  local members_output
+  if ! members_output="$("$ar_bin" t "$archive_abs" 2>/dev/null)"; then
     cleanup
     return 1
   fi
+  while IFS= read -r member_line; do
+    members+=("$member_line")
+  done <<<"$members_output"
 
   local -a object_members=()
   local member
@@ -374,24 +421,34 @@ build_common::mitigate_mingw_refptr_comdats() {
     set -euo pipefail
     cd "$tmpdir"
 
-    local ar_extract_output=""
-    if ! ar_extract_output="$("$ar_bin" x "$archive_abs" 2>&1)"; then
-      if ! build_common::ar_extract_output_is_symbol_warning "$ar_extract_output"; then
-        printf '%s\n' "$ar_extract_output" >&2
+    local -a temp_member_files=()
+    local idx=0
+    local member temp_file
+    for member in "${object_members[@]}"; do
+      temp_file="${tmpdir}/member_${idx}.obj"
+      if ! "$ar_bin" p "$archive_abs" "$member" >"$temp_file" 2>/dev/null; then
+        printf '❌ Unable to extract %s from %s\n' "$member" "$archive_abs" >&2
         exit 1
       fi
-    fi
+      temp_member_files+=("$temp_file")
+      ((idx++))
+    done
 
     local -a sections=()
     local modified=0
     local renamed_sections=0
     local logged=0
 
-    for member in "${object_members[@]}"; do
-      if [[ ! -f "$member" ]]; then
+    for idx in "${!object_members[@]}"; do
+      member="${object_members[idx]}"
+      temp_file="${temp_member_files[idx]}"
+      if [[ ! -f "$temp_file" ]]; then
         continue
       fi
-      mapfile -t sections < <("$objdump_bin" -h "$member" 2>/dev/null | awk '$2 ~ /\.refptr/ {print $2}') || sections=()
+      sections=()
+      while IFS= read -r section_line; do
+        sections+=("$section_line")
+      done < <("$objdump_bin" -h "$temp_file" 2>/dev/null | awk '$2 ~ /\.refptr/ {print $2}')
       if (( ${#sections[@]} == 0 )); then
         continue
       fi
@@ -408,21 +465,46 @@ build_common::mitigate_mingw_refptr_comdats() {
           new_name="${new_name/.rdata$.refptr/.rdata\$refptr_}"
         fi
         if [[ "$new_name" == "$section" ]]; then
+          new_name="${new_name/.refptr\./.refptr\$}"
+        fi
+        if [[ "$new_name" == "$section" ]]; then
           echo "❌ Unable to compute sanitized name for section ${section} in ${member}" >&2
           exit 1
         fi
         local rename_output=""
-        if ! rename_output="$("$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$member" 2>&1)"; then
+        local rewritten=0
+        while :; do
+          if rename_output="$("$objcopy_bin" --rename-section "${section}=${new_name},alloc,load,readonly,data" "$temp_file" 2>&1)"; then
+            rewritten=1
+            break
+          fi
+          if [[ "$rename_output" == *"file in wrong format"* ]]; then
+            if (( (objcopy_index + 1) < ${#objcopy_bins[@]} )); then
+              ((objcopy_index++))
+              objcopy_bin="${objcopy_bins[$objcopy_index]}"
+              echo "ℹ️  [MinGW] retrying section rewrite using ${objcopy_bin}" >&2
+              continue
+            fi
+            if build_common::coff_replace_section_name "$temp_file" "$section" "$new_name"; then
+              rewritten=1
+              break
+            fi
+          fi
           if [[ "$rename_output" == *"option is not supported for COFF"* ]]; then
-            if ! build_common::coff_replace_section_name "$member" "$section" "$new_name"; then
+            if ! build_common::coff_replace_section_name "$temp_file" "$section" "$new_name"; then
               printf '%s\n' "$rename_output" >&2
               echo "❌ Unable to rewrite COFF section ${section} in ${member}" >&2
               exit 1
             fi
-          else
-            printf '%s\n' "$rename_output" >&2
-            exit 1
+            rewritten=1
+            break
           fi
+          printf '%s\n' "$rename_output" >&2
+          exit 1
+        done
+        if (( ! rewritten )); then
+          echo "❌ Unable to rewrite section ${section} in ${member}" >&2
+          exit 1
         fi
         ((renamed_sections++))
       done
@@ -431,13 +513,42 @@ build_common::mitigate_mingw_refptr_comdats() {
     if (( modified )); then
       local new_archive="${archive_abs}.tmp"
       rm -f "$new_archive"
-      "$ar_bin" qc "$new_archive" "${object_members[@]}"
+      local stage_dir="$tmpdir/stage"
+      mkdir -p "$stage_dir"
+      for idx in "${!object_members[@]}"; do
+        member="${object_members[idx]}"
+        temp_file="${temp_member_files[idx]}"
+        local staging_path="${stage_dir}/${member}"
+        cp "$temp_file" "$staging_path"
+        "$ar_bin" qc "$new_archive" "$staging_path"
+        rm -f "$staging_path"
+      done
       if [[ -n "$ranlib_bin" ]]; then
         "$ranlib_bin" "$new_archive" >/dev/null 2>&1 || true
       fi
       mv "$new_archive" "$archive_abs"
       echo "✅ [MinGW] sanitized ${archive_abs} (${renamed_sections} sections updated)" >&2
     fi
+  )
+
+  local compression_flag="${DISABLE_ROCKSDB_OPTIONAL_COMPRESSION:-0}"
+  if [[ "$compression_flag" == "1" ]]; then
+    common_args+=(
+      -DWITH_SNAPPY=OFF
+      -DWITH_LZ4=OFF
+      -DWITH_ZSTD=OFF
+      -DWITH_BZ2=OFF
+    )
+  else
+    common_args+=(
+      -DWITH_SNAPPY=ON
+      -DWITH_LZ4=ON
+      -DWITH_ZSTD=ON
+      -DWITH_BZ2=ON
+    )
+  fi
+  common_args+=(
+    -DWITH_ZLIB=ON
   )
 
   local status=$?
@@ -505,10 +616,14 @@ build_common::verify_mingw_refptr_sections_rewritten() {
   }
 
   local -a members=()
-  if ! mapfile -t members < <("$ar_bin" t "$archive_abs" 2>/dev/null); then
+  local members_output
+  if ! members_output="$("$ar_bin" t "$archive_abs" 2>/dev/null)"; then
     cleanup
     return 1
   fi
+  while IFS= read -r member_line; do
+    members+=("$member_line")
+  done <<<"$members_output"
 
   local -a object_members=()
   local member
@@ -536,19 +651,26 @@ build_common::verify_mingw_refptr_sections_rewritten() {
     set -euo pipefail
     cd "$tmpdir"
 
-    local ar_extract_output=""
-    if ! ar_extract_output="$("$ar_bin" x "$archive_abs" 2>&1)"; then
-      if ! build_common::ar_extract_output_is_symbol_warning "$ar_extract_output"; then
-        printf '%s\n' "$ar_extract_output" >&2
+    local -a temp_member_files=()
+    local idx=0
+    local member temp_file
+    for member in "${object_members[@]}"; do
+      temp_file="${tmpdir}/member_${idx}.obj"
+      if ! "$ar_bin" p "$archive_abs" "$member" >"$temp_file" 2>/dev/null; then
+        printf '❌ Unable to extract %s from %s\n' "$member" "$archive_abs" >&2
         exit 1
       fi
-    fi
+      temp_member_files+=("$temp_file")
+      ((idx++))
+    done
 
-    for member in "${object_members[@]}"; do
-      if [[ ! -f "$member" ]]; then
+    for idx in "${!object_members[@]}"; do
+      member="${object_members[idx]}"
+      temp_file="${temp_member_files[idx]}"
+      if [[ ! -f "$temp_file" ]]; then
         continue
       fi
-      if "$objdump_bin" -h "$member" 2>/dev/null | grep -Fq '.refptr'; then
+      if "$objdump_bin" -h "$temp_file" 2>/dev/null | grep -Fq '.refptr'; then
         echo "❌ MinGW refptr COMDATs remain in ${archive_abs} (member ${member})" >&2
         exit 1
       fi
@@ -575,12 +697,26 @@ build_common::sanitize_mingw_archives_in_tree() {
     return 0
   fi
 
+  local normalized_root
+  normalized_root="$(cd "$root_dir" 2>/dev/null && pwd 2>/dev/null || true)"
+  if [[ -n "$normalized_root" ]]; then
+    root_dir="$normalized_root"
+  fi
+
+  local stamp_file="${root_dir%/}/.mingw_refptr_sanitized"
+  if [[ -f "$stamp_file" ]]; then
+    if ! find "$root_dir" -type f -name '*.a' -newer "$stamp_file" -print -quit 2>/dev/null | grep -q .; then
+      echo "ℹ️  [MinGW] archives already sanitized under ${root_dir} (stamp up to date)" >&2
+      return 0
+    fi
+  fi
+
   echo "🔍 [MinGW] scanning ${root_dir} for static archives" >&2
 
   local -a archives=()
-  if ! mapfile -t -d '' archives < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null); then
-    archives=()
-  fi
+  while IFS= read -r -d '' archive_path; do
+    archives+=("$archive_path")
+  done < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null)
 
   if (( ${#archives[@]} == 0 )); then
     return 0
@@ -597,6 +733,10 @@ build_common::sanitize_mingw_archives_in_tree() {
       overall_status=1
     fi
   done
+
+  if (( overall_status == 0 )); then
+    touch "$stamp_file" 2>/dev/null || true
+  fi
 
   return $overall_status
 }
@@ -619,12 +759,35 @@ build_common::assert_mingw_archives_sanitized() {
     return 1
   fi
 
+  local normalized_root
+  normalized_root="$(cd "$root_dir" 2>/dev/null && pwd 2>/dev/null || true)"
+  if [[ -n "$normalized_root" ]]; then
+    root_dir="$normalized_root"
+  fi
+
+  if [[ ":${BUILD_COMMON_VALIDATED_MINGW_ROOTS:-}:" == *":$root_dir:"* ]]; then
+    return 0
+  fi
+
+  local stamp_file="${root_dir%/}/.mingw_refptr_sanitized"
+  if [[ -f "$stamp_file" ]]; then
+    if ! find "$root_dir" -type f -name '*.a' -newer "$stamp_file" -print -quit 2>/dev/null | grep -q .; then
+      if [[ -n "${BUILD_COMMON_VALIDATED_MINGW_ROOTS:-}" ]]; then
+        BUILD_COMMON_VALIDATED_MINGW_ROOTS+=":$root_dir"
+      else
+        BUILD_COMMON_VALIDATED_MINGW_ROOTS="$root_dir"
+      fi
+      echo "ℹ️  [MinGW] validation skipped for ${root_dir} (stamp up to date)" >&2
+      return 0
+    fi
+  fi
+
   echo "🧪 [MinGW] validating sanitized archives under ${root_dir}" >&2
 
   local -a archives=()
-  if ! mapfile -t -d '' archives < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null); then
-    archives=()
-  fi
+  while IFS= read -r -d '' archive_path; do
+    archives+=("$archive_path")
+  done < <(find "$root_dir" -type f -name '*.a' -print0 2>/dev/null)
 
   if (( ${#archives[@]} == 0 )); then
     echo "❌ No static libraries were discovered under ${root_dir}" >&2
@@ -637,6 +800,12 @@ build_common::assert_mingw_archives_sanitized() {
       return 1
     fi
   done
+
+  if [[ -n "${BUILD_COMMON_VALIDATED_MINGW_ROOTS:-}" ]]; then
+    BUILD_COMMON_VALIDATED_MINGW_ROOTS+=":$root_dir"
+  else
+    BUILD_COMMON_VALIDATED_MINGW_ROOTS="$root_dir"
+  fi
 
   return 0
 }
@@ -1353,11 +1522,6 @@ build_common::cmake_configure() {
     -DCMAKE_INSTALL_PREFIX="$build_dir"
     -DPORTABLE=1
     -DWITH_GFLAGS=OFF
-    -DWITH_SNAPPY=ON
-    -DWITH_LZ4=ON
-    -DWITH_ZLIB=ON
-    -DWITH_ZSTD=ON
-    -DWITH_BZ2=ON
     -DROCKSDB_BUILD_SHARED=OFF
     -DROCKSDB_BUILD_STATIC=ON
     -DWITH_TESTS=OFF

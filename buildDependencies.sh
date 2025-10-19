@@ -106,6 +106,9 @@ fi
 
 strip_archive() {
   local archive="$1"
+  if is_mingw_build; then
+    return 0
+  fi
   if [[ -n "$STRIP_BIN" && -f "$archive" ]]; then
     "$STRIP_BIN" -S -x "$archive" || true
   fi
@@ -1126,10 +1129,14 @@ else
 fi
 
 if is_mingw_build; then
-  echo "Sanitizing MinGW archives under ${OUTPUT_DIR}"
-  refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
-  build_common::sanitize_mingw_archives_in_tree "${OUTPUT_DIR}" "$refptr_triple"
-  build_common::assert_mingw_archives_sanitized "${OUTPUT_DIR}" "$refptr_triple"
+  if [[ "${SKIP_MINGW_SANITIZE:-0}" == "1" ]]; then
+    echo "⚠️  Skipping MinGW archive sanitization because SKIP_MINGW_SANITIZE=${SKIP_MINGW_SANITIZE}"
+  else
+    echo "Sanitizing MinGW archives under ${OUTPUT_DIR}"
+    refptr_triple="${TOOLCHAIN_TRIPLE:-${MINGW_TRIPLE:-}}"
+    build_common::sanitize_mingw_archives_in_tree "${OUTPUT_DIR}" "$refptr_triple"
+    build_common::assert_mingw_archives_sanitized "${OUTPUT_DIR}" "$refptr_triple"
+  fi
 fi
 
 echo "All dependencies have been successfully built and are located in ${OUTPUT_DIR}!"

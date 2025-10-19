@@ -214,7 +214,7 @@ cd "${REPO_ROOT}" || { echo "Failed to navigate to repository root"; exit 1; }
 BUILD_DIR="${REPO_ROOT}/${BUILD_DIR}"
 
 # Check if the output library already exists
-if build_common::check_existing_artifacts "$BUILD_DIR"; then
+if [[ -z "${FORCE_REBUILD:-}" ]] && build_common::check_existing_artifacts "$BUILD_DIR"; then
   exit 0
 fi
 
@@ -237,6 +237,16 @@ cmake_args+=(
   -DCMAKE_CXX_COMPILER="$CXX"
 )
 
+if [[ -n "${AR:-}" ]]; then
+  cmake_args+=("-DCMAKE_AR=${AR}")
+fi
+if [[ -n "${RANLIB:-}" ]]; then
+  cmake_args+=("-DCMAKE_RANLIB=${RANLIB}")
+fi
+if [[ -n "${RC:-}" ]]; then
+  cmake_args+=("-DCMAKE_RC_COMPILER=${RC}")
+fi
+
 build_common::cmake_configure \
   "$REPO_ROOT" \
   "$BUILD_DIR" \
@@ -246,5 +256,9 @@ build_common::cmake_configure \
 
 build_common::run_cmake_build "$BUILD_DIR" "$NUM_CORES"
 
-build_common::sanitize_mingw_archives_in_tree "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}"
-build_common::assert_mingw_archives_sanitized "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}"
+if [[ "${SKIP_MINGW_SANITIZE:-0}" != "1" ]]; then
+  build_common::sanitize_mingw_archives_in_tree "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}"
+  build_common::assert_mingw_archives_sanitized "${BUILD_DIR}" "${TOOLCHAIN_TRIPLE:-}"
+else
+  echo "⚠️  Skipping MinGW archive sanitization because SKIP_MINGW_SANITIZE=${SKIP_MINGW_SANITIZE}" >&2
+fi

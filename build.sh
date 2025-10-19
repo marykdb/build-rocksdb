@@ -558,7 +558,11 @@ package_artifacts() {
   fi
 
   if config_is_mingw "$config"; then
-    build_common::assert_mingw_archives_sanitized "$lib_base" "$(config_mingw_triple "$config")"
+    if [[ "${SKIP_MINGW_SANITIZE:-0}" != "1" ]]; then
+      build_common::assert_mingw_archives_sanitized "$lib_base" "$(config_mingw_triple "$config")"
+    else
+      echo "⚠️  Skipping MinGW archive validation because SKIP_MINGW_SANITIZE=${SKIP_MINGW_SANITIZE}" >&2
+    fi
   fi
 
   local staging
