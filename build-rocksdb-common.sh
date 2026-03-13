@@ -992,7 +992,7 @@ build_common::run_cmake_build() {
     echo "⚠️  Detected CMake without --parallel support; falling back to serialized builds." >&2
     BUILD_COMMON_CMAKE_PARALLEL_WARNED=1
   fi
-  "${cmake_build_cmd[@]}" 2>&1
+  "${cmake_build_cmd[@]}" 2>&1 | tee "$build_log"
   local build_status=$?
   set -e
 
@@ -1002,7 +1002,7 @@ build_common::run_cmake_build() {
   elif [[ -f "${build_dir}/rocksdb-build/librocksdb.a" ]]; then
     echo "** BUILD SUCCEEDED for ${build_dir} **"
     return 0
-  elif grep -q "up-to-date" "$build_log"; then
+  elif [[ -f "$build_log" ]] && grep -q "up-to-date" "$build_log"; then
     echo "** BUILD NOT NEEDED for ${build_dir} (Already up to date) **"
     return 0
   elif [[ $build_status -ne 0 ]]; then

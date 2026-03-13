@@ -26,7 +26,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             rocksdb-linux-legacy \
-            bash -lc './build.sh linuxX64'
+            bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxX64'
       - uses: actions/upload-artifact@v4
         with:
           name: rocksdb-linux-x86_64
@@ -49,7 +49,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             rocksdb-linux-legacy \
-            bash -lc './build.sh linuxArm64'
+            bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxArm64'
       - name: Ensure release tooling is available
         run: |
           sudo apt-get update
