@@ -21,14 +21,14 @@ RUN apt-get update \
  && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
-      gcc-10 \
-      g++-10 \
+      gcc-11 \
+      g++-11 \
  && rm -rf /var/lib/apt/lists/*
 
-RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 90 \
-    --slave /usr/bin/g++ g++ /usr/bin/g++-10
+RUN update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 90 \
+    --slave /usr/bin/g++ g++ /usr/bin/g++-11
 
-ENV CC=gcc-10
-ENV CXX=g++-10
+ENV CC=gcc-11
+ENV CXX=g++-11
 
 WORKDIR /workspace
