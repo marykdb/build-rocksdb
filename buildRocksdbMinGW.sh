@@ -123,6 +123,8 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
     use_clang=1
   fi
 
+  build_common::guard_mingw_gcc_runtime_compatibility "${TOOLCHAIN_TRIPLE}" "${CXX:-${CC:-}}"
+
   if (( use_clang )); then
     build_common::append_unique_flag EXTRA_C_FLAGS "-femulated-tls"
     build_common::append_unique_flag EXTRA_CXX_FLAGS "-femulated-tls"

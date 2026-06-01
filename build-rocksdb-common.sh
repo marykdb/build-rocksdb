@@ -150,6 +150,43 @@ build_common::compiler_is_clang() {
   return 1
 }
 
+build_common::guard_mingw_gcc_runtime_compatibility() {
+  local triple="$1"
+  local compiler="$2"
+
+  if [[ "${ALLOW_SYSTEM_MINGW_GCC:-0}" == "1" ]]; then
+    return 0
+  fi
+  if ! build_common::is_mingw_triple "$triple"; then
+    return 0
+  fi
+  if [[ -z "$compiler" ]] || build_common::compiler_is_clang "$compiler"; then
+    return 0
+  fi
+
+  local compiler_path
+  compiler_path="$(command -v "$compiler" 2>/dev/null || true)"
+  [[ -n "$compiler_path" ]] || return 0
+
+  local version
+  version="$("$compiler_path" -dumpfullversion -dumpversion 2>/dev/null | head -n 1 || true)"
+  local major="${version%%.*}"
+  if [[ "$major" =~ ^[0-9]+$ ]] && (( major > 10 )); then
+    cat >&2 <<EOF
+Unsupported MinGW GCC runtime for ${triple}: ${compiler_path} reports GCC ${version}.
+
+Kotlin/Native MinGW consumers expect the CI-style LLVM-MinGW/WinLibs GCC 9.x
+runtime model. Newer system MinGW GCC toolchains can produce libstdc++ and
+pthread references that do not link in rocksdb-multiplatform.
+
+Use ./rdb-win.sh on Windows, or expose the CI toolchain with LLVM_MINGW_ROOT and
+MINGW_SYSROOT. Set ALLOW_SYSTEM_MINGW_GCC=1 only if you intentionally want a
+locally incompatible experimental artifact.
+EOF
+    return 1
+  fi
+}
+
 build_common::is_windows_host() {
   case "$(uname -s 2>/dev/null || echo unknown)" in
     MINGW*|MSYS*|CYGWIN*) return 0 ;;
@@ -996,7 +1033,10 @@ build_common::run_cmake_build() {
   local build_status=$?
   set -e
 
-  if [[ -f "${build_dir}/librocksdb.a" ]]; then
+  if [[ $build_status -ne 0 ]]; then
+    echo "** BUILD FAILED for ${build_dir} **"
+    return 1
+  elif [[ -f "${build_dir}/librocksdb.a" ]]; then
     echo "** BUILD SUCCEEDED for ${build_dir} **"
     return 0
   elif [[ -f "${build_dir}/rocksdb-build/librocksdb.a" ]]; then
@@ -1005,9 +1045,6 @@ build_common::run_cmake_build() {
   elif [[ -f "$build_log" ]] && grep -q "up-to-date" "$build_log"; then
     echo "** BUILD NOT NEEDED for ${build_dir} (Already up to date) **"
     return 0
-  elif [[ $build_status -ne 0 ]]; then
-    echo "** BUILD FAILED for ${build_dir} **"
-    return 1
   else
     echo "** BUILD RESULT UNKNOWN; neither artifact nor explicit failure detected (check $build_log) **"
     return 1

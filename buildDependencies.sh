@@ -283,6 +283,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_x86_64* ]]; then
   elif build_common::compiler_is_clang "${CXX:-}"; then
     local_mingw_uses_clang=1
   fi
+  build_common::guard_mingw_gcc_runtime_compatibility "${TOOLCHAIN_TRIPLE}" "${CXX:-${CC:-}}"
   if (( local_mingw_uses_clang )); then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
@@ -389,6 +390,7 @@ elif [[ "$OUTPUT_DIR" == *mingw_arm64* ]]; then
   elif build_common::compiler_is_clang "${CXX:-}"; then
     local_mingw_uses_clang=1
   fi
+  build_common::guard_mingw_gcc_runtime_compatibility "${TOOLCHAIN_TRIPLE}" "${CXX:-${CC:-}}"
   if (( local_mingw_uses_clang )); then
     build_common::append_unique_flag EXTRA_CFLAGS "--target=${TOOLCHAIN_TRIPLE}"
     build_common::append_unique_flag EXTRA_CXXFLAGS "--target=${TOOLCHAIN_TRIPLE}"
