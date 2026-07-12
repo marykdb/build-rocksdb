@@ -876,15 +876,51 @@ build_common::warn_missing_snappy() {
 
 build_common::check_existing_artifacts() {
   local build_dir="$1"
-  if [[ -f "${build_dir}/librocksdb.a" ]]; then
+  local marker="${build_dir}/.rocksdb-build-input"
+  local current
+  current="$(build_common::build_input_fingerprint)"
+  if [[ -f "${build_dir}/librocksdb.a" && -f "$marker" && "$(<"$marker")" == "$current" ]]; then
     echo "** BUILD SKIPPED: ${build_dir}/librocksdb.a already exists **"
     return 0
   fi
-  if [[ -f "${build_dir}/rocksdb-build/librocksdb.a" ]]; then
+  if [[ -f "${build_dir}/rocksdb-build/librocksdb.a" && -f "$marker" && "$(<"$marker")" == "$current" ]]; then
     echo "** BUILD SKIPPED: ${build_dir}/rocksdb-build/librocksdb.a already exists **"
     return 0
   fi
   return 1
+}
+
+build_common::build_input_fingerprint() {
+  {
+    git -C "$BUILD_COMMON_DIR" rev-parse HEAD 2>/dev/null || true
+    git -C "$BUILD_COMMON_DIR" diff --binary -- . ':!build/**' 2>/dev/null || true
+    git -C "$BUILD_COMMON_DIR" diff --cached --binary -- . ':!build/**' 2>/dev/null || true
+    build_common::hash_untracked_build_inputs "$BUILD_COMMON_DIR" . ':!build/**'
+    git -C "$BUILD_COMMON_DIR/rocksdb" rev-parse HEAD 2>/dev/null || true
+    git -C "$BUILD_COMMON_DIR/rocksdb" diff --binary 2>/dev/null || true
+    git -C "$BUILD_COMMON_DIR/rocksdb" diff --cached --binary 2>/dev/null || true
+    build_common::hash_untracked_build_inputs "$BUILD_COMMON_DIR/rocksdb"
+    printf '%s\n' "CC=${CC:-}" "CXX=${CXX:-}" "CFLAGS=${CFLAGS:-}" "CXXFLAGS=${CXXFLAGS:-}" "LDFLAGS=${LDFLAGS:-}"
+  } | shasum -a 256 | awk '{print $1}'
+}
+
+build_common::hash_untracked_build_inputs() {
+  local repository="$1"
+  shift
+
+  git -C "$repository" ls-files -z --others --exclude-standard -- "$@" 2>/dev/null |
+    while IFS= read -r -d '' path; do
+      case "$path" in
+        *.c|*.cc|*.cpp|*.cxx|*.h|*.hpp|CMakeLists.txt|*.cmake|Makefile|*.mk|*.sh)
+          printf 'untracked:%s\0' "$path"
+          shasum -a 256 -- "$repository/$path"
+          ;;
+      esac
+    done
+}
+
+build_common::write_build_input_marker() {
+  printf '%s\n' "$(build_common::build_input_fingerprint)" > "$1/.rocksdb-build-input"
 }
 
 build_common::default_parallel_jobs() {
@@ -1037,9 +1073,11 @@ build_common::run_cmake_build() {
     echo "** BUILD FAILED for ${build_dir} **"
     return 1
   elif [[ -f "${build_dir}/librocksdb.a" ]]; then
+    build_common::write_build_input_marker "$build_dir"
     echo "** BUILD SUCCEEDED for ${build_dir} **"
     return 0
   elif [[ -f "${build_dir}/rocksdb-build/librocksdb.a" ]]; then
+    build_common::write_build_input_marker "$build_dir"
     echo "** BUILD SUCCEEDED for ${build_dir} **"
     return 0
   elif [[ -f "$build_log" ]] && grep -q "up-to-date" "$build_log"; then
