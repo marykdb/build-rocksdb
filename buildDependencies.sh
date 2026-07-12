@@ -45,6 +45,7 @@ TOOLCHAIN_FILE=null
 IOS_TOOLCHAIN_URL="https://github.com/leetal/ios-cmake/archive/refs/tags/4.5.0.tar.gz"
 IOS_TOOLCHAIN_ARCHIVE="${DOWNLOAD_DIR}/ios-cmake-4.5.0.tar.gz"
 IOS_TOOLCHAIN_DIR="${DOWNLOAD_DIR}/ios-toolchain"
+IOS_TOOLCHAIN_SHA256="c7f28f14ef4060a93151dbe9ae5591022550be9593afdc30deb0952241df6c03"
 
 # zlib
 DEFAULT_ZLIB_VER="1.3.2"
@@ -500,16 +501,22 @@ LZ4_DOWNLOAD_BASE="${LZ4_DOWNLOAD_BASE:-$DEFAULT_LZ4_DOWNLOAD_BASE}"
 mkdir -p "$DOWNLOAD_DIR"
 
 download_ios_toolchain() {
-  if [ -d "${IOS_TOOLCHAIN_DIR}" ]; then
-    return
-  fi
-
   mkdir -p "${DOWNLOAD_DIR}"
-  if curl --silent --fail --location -o "${IOS_TOOLCHAIN_ARCHIVE}" "${IOS_TOOLCHAIN_URL}"; then
+  if [[ -f "${IOS_TOOLCHAIN_ARCHIVE}" ]] && [[ "$(shasum -a 256 "${IOS_TOOLCHAIN_ARCHIVE}" | awk '{print tolower($1)}')" != "${IOS_TOOLCHAIN_SHA256}" ]]; then
+    rm -f "${IOS_TOOLCHAIN_ARCHIVE}"
+  fi
+  if [[ ! -f "${IOS_TOOLCHAIN_ARCHIVE}" ]] && curl --silent --fail --location -o "${IOS_TOOLCHAIN_ARCHIVE}" "${IOS_TOOLCHAIN_URL}"; then
     echo "✅ Downloaded iOS toolchain successfully."
-  else
+  elif [[ ! -f "${IOS_TOOLCHAIN_ARCHIVE}" ]]; then
     echo "❌ Error downloading iOS toolchain from ${IOS_TOOLCHAIN_URL}" >&2
     exit 1
+  fi
+  if [[ "$(shasum -a 256 "${IOS_TOOLCHAIN_ARCHIVE}" | awk '{print tolower($1)}')" != "${IOS_TOOLCHAIN_SHA256}" ]]; then
+    echo "❌ iOS toolchain checksum mismatch" >&2
+    exit 1
+  fi
+  if [ -f "${IOS_TOOLCHAIN_DIR}/ios.toolchain.cmake" ]; then
+    return
   fi
   mkdir -p "${IOS_TOOLCHAIN_DIR}"
   tar -xzf "${IOS_TOOLCHAIN_ARCHIVE}" -C "${DOWNLOAD_DIR}"
