@@ -13,7 +13,7 @@ jobs:
     name: Linux x86_64
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -27,7 +27,7 @@ jobs:
             -w /workspace \
             rocksdb-linux-legacy \
             bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxX64'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-linux-x86_64
           path: build/archives/rocksdb-linux-x86_64.zip
@@ -36,7 +36,7 @@ jobs:
     name: Linux ARM64
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -54,7 +54,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq curl
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-linux-arm64
           path: build/archives/rocksdb-linux-arm64.zip
@@ -63,7 +63,7 @@ jobs:
     name: Android ARM32
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -74,7 +74,7 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
       - name: Build Android ARM32 package
         run: ./build.sh androidNativeArm32
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-android-arm32
           path: build/archives/rocksdb-android-arm32.zip
@@ -83,7 +83,7 @@ jobs:
     name: Android ARM64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -94,7 +94,7 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
       - name: Build Android ARM64 package
         run: ./build.sh androidNativeArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-android-arm64
           path: build/archives/rocksdb-android-arm64.zip
@@ -103,7 +103,7 @@ jobs:
     name: Android x86
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -114,7 +114,7 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
       - name: Build Android x86 package
         run: ./build.sh androidNativeX86
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-android-x86
           path: build/archives/rocksdb-android-x86.zip
@@ -123,7 +123,7 @@ jobs:
     name: Android x86_64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -134,7 +134,7 @@ jobs:
           sudo apt-get install -y build-essential cmake ninja-build pkg-config autoconf automake libtool curl unzip zip
       - name: Build Android x86_64 package
         run: ./build.sh androidNativeX64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-android-x64
           path: build/archives/rocksdb-android-x64.zip
@@ -146,7 +146,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
@@ -241,7 +241,7 @@ jobs:
           fi
       - name: Check MinGW refptr rewrites
         run: ./scripts/verify-mingw-refptr.sh build/lib/mingw_x86_64 x86_64-w64-mingw32
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-mingw-x86_64
           path: build/archives/rocksdb-mingw-x86_64.zip
@@ -250,14 +250,14 @@ jobs:
     name: macOS x86_64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build macOS x86_64 package
         run: ./build.sh macosX64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-macos-x86_64
           path: build/archives/rocksdb-macos-x86_64.zip
@@ -266,14 +266,14 @@ jobs:
     name: macOS ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build macOS ARM64 package
         run: ./build.sh macosArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-macos-arm64
           path: build/archives/rocksdb-macos-arm64.zip
@@ -282,14 +282,14 @@ jobs:
     name: iOS ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build iOS ARM64 package
         run: ./build.sh iosArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-ios-arm64
           path: build/archives/rocksdb-ios-arm64.zip
@@ -298,14 +298,14 @@ jobs:
     name: iOS Simulator ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build iOS Simulator ARM64 package
         run: ./build.sh iosSimulatorArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-ios-simulator-arm64
           path: build/archives/rocksdb-ios-simulator-arm64.zip
@@ -314,14 +314,14 @@ jobs:
     name: watchOS arm64_32
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build watchOS arm64_32 package
         run: ./build.sh watchosArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-watchos-arm64
           path: build/archives/rocksdb-watchos-arm64.zip
@@ -330,14 +330,14 @@ jobs:
     name: watchOS Device ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build watchOS Device ARM64 package
         run: ./build.sh watchosDeviceArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-watchos-device-arm64
           path: build/archives/rocksdb-watchos-device-arm64.zip
@@ -346,14 +346,14 @@ jobs:
     name: watchOS Simulator ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build watchOS Simulator ARM64 package
         run: ./build.sh watchosSimulatorArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-watchos-simulator-arm64
           path: build/archives/rocksdb-watchos-simulator-arm64.zip
@@ -362,14 +362,14 @@ jobs:
     name: tvOS ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build tvOS ARM64 package
         run: ./build.sh tvosArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-tvos-arm64
           path: build/archives/rocksdb-tvos-arm64.zip
@@ -378,14 +378,14 @@ jobs:
     name: tvOS Simulator ARM64
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
       - name: Build tvOS Simulator ARM64 package
         run: ./build.sh tvosSimulatorArm64
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-tvos-simulator-arm64
           path: build/archives/rocksdb-tvos-simulator-arm64.zip
@@ -412,12 +412,12 @@ jobs:
       - android-x64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
           ref: ${{ github.sha }}
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: List downloaded artifacts
@@ -450,7 +450,7 @@ jobs:
           timestamp="$(date +'%Y%m%dT%H%M%S')Z"
           echo "timestamp=$timestamp" >> "$GITHUB_OUTPUT"
           echo "tag=rocksdb-${ROCKSDB_VERSION}-${timestamp}" >> "$GITHUB_OUTPUT"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: artifacts/**/*.zip
           name: RocksDB ${{ steps.rocksdb_version.outputs.version }} builds ${{ steps.release_metadata.outputs.timestamp }}
