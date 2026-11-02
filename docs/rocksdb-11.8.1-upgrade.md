@@ -71,3 +71,12 @@ done
 The release workflow now has a required Linux C API job that checks symbols, compares signatures against the immutable previous Maryk commit, and runs the assertion-enabled C suite. Full release archives, compression-enabled builds, Linux/Windows/Android and Apple cross-target builds, and downstream Kotlin bindings were not built locally. No GitHub workflow or publication was triggered.
 
 The two pre-existing toolchain ZIP downloads and the old `rocksdb/db_test2` executable were left untouched. The executable becomes visible as untracked under 11.8's ignore rules.
+
+## CI follow-up
+
+The first build on `main` (run `41453777867`) passed 15 platform jobs but failed the C API gate and Android x86, preventing publication.
+
+- The compatibility baseline fetch failed with `shallow file has changed since we read it`. The C API job now checks out full history and fetches the baseline without shallow or recursive fetching.
+- Android x86 gave `InjectedErrorLog::Entry` four-byte alignment, producing a 252-byte record instead of the required 256 bytes. Maryk commit `8c1c45524` explicitly aligns the record to eight bytes, preserving its existing field offsets and the required record size.
+
+The original Android x86 compile failure was reproduced locally. With the fix, `fault_injection_fs.cc` passes compilation checks using NDK 29 for all four Android architectures. The complete debug C suite and all seven `fault_injection_fs_test` tests pass. C API completeness, compatibility, clang-format 21, source checks, and workflow YAML checks also pass. Full Android package builds and the updated workflow require hosted CI verification.

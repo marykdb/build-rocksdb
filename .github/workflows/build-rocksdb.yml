@@ -17,10 +17,11 @@ jobs:
         with:
           submodules: true
           ref: ${{ github.sha }}
+          fetch-depth: 0
       - name: Check C API symbols and Maryk compatibility
         run: |
           python3 rocksdb/tools/c_api_gen/check_api_completeness.py
-          git -C rocksdb fetch --no-tags --depth=1 origin a0a9a3e637ada76e3ada6deba79f6fbc56956f08
+          git -C rocksdb fetch --no-tags --no-recurse-submodules origin a0a9a3e637ada76e3ada6deba79f6fbc56956f08
           python3 rocksdb/tools/c_api_gen/check_api_compatibility.py --ref a0a9a3e637ada76e3ada6deba79f6fbc56956f08
       - name: Build C API tests with assertions enabled
         run: |
