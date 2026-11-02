@@ -9,6 +9,29 @@ permissions:
   contents: write
 
 jobs:
+  c-api-tests:
+    name: C API compatibility and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+          ref: ${{ github.sha }}
+      - name: Check C API symbols and Maryk compatibility
+        run: |
+          python3 rocksdb/tools/c_api_gen/check_api_completeness.py
+          git -C rocksdb fetch --no-tags --depth=1 origin a0a9a3e637ada76e3ada6deba79f6fbc56956f08
+          python3 rocksdb/tools/c_api_gen/check_api_compatibility.py --ref a0a9a3e637ada76e3ada6deba79f6fbc56956f08
+      - name: Build C API tests with assertions enabled
+        run: |
+          cmake -S rocksdb -B build/c-api-tests \
+            -DCMAKE_BUILD_TYPE=Debug -DWITH_TESTS=ON -DWITH_GFLAGS=OFF \
+            -DWITH_BENCHMARK_TOOLS=OFF -DWITH_TOOLS=OFF -DWITH_CORE_TOOLS=OFF \
+            -DROCKSDB_BUILD_SHARED=OFF -DPORTABLE=ON
+          cmake --build build/c-api-tests --target c_test --parallel 2
+      - name: Run C API tests
+        run: ctest --test-dir build/c-api-tests -R '^c_test$' --output-on-failure
+
   linux-x64:
     name: Linux x86_64
     runs-on: ubuntu-24.04
@@ -393,6 +416,7 @@ jobs:
   publish-release:
     name: Publish Release
     needs:
+      - c-api-tests
       - linux-x64
       - linux-arm64
       - mingw-x64

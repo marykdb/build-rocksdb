@@ -3,6 +3,21 @@
 ## Purpose
 This repository automates building and packaging static RocksDB distributions with their compression codecs for every platform consumed by marykdb's [`rocksdb-multiplatform`](https://github.com/marykdb/rocksdb-multiplatform). The `build.sh` orchestrator drives platform-specific scripts to produce archives for Linux, Windows (MinGW), macOS, iOS, watchOS, tvOS, and Android from a single checkout.
 
+The RocksDB submodule uses the `11.8.maryk` branch, based on upstream **11.8.1** with Maryk's C API and platform support. See the [upgrade report](docs/rocksdb-11.8.1-upgrade.md) for compatibility decisions and verification results. RocksDB 11.8 requires C++20; the Linux build container already provides GCC 11.
+
+## C API maintenance
+
+Edit `rocksdb/tools/c_api_gen/c_base.h`, `c_base.cc`, and `spec.json`, then regenerate the public header and implementation. Use clang-format 21, matching upstream's C API generation checks:
+
+```bash
+python3 rocksdb/tools/c_api_gen/regen_all.py --clang-format clang-format-21
+python3 rocksdb/tools/c_api_gen/check_api_completeness.py
+python3 rocksdb/tools/c_api_gen/check_api_compatibility.py --ref 10.10.maryk
+python3 rocksdb/tools/c_api_gen/verify_generated_up_to_date.py --clang-format clang-format-21
+```
+
+The release workflow builds and runs `c_test` with assertions enabled and checks compatibility with the pinned previous Maryk revision before publishing artifacts.
+
 ## Build workflow
 1. `build.sh` resolves the active host platform, accepts an optional Kotlin/Native version, and selects the configurations to compile (defaults are picked per host when no explicit list is provided).
 2. Kotlin/Native toolchains are installed on demand for cross-compilation targets before each build step runs.
