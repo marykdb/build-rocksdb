@@ -31,7 +31,7 @@ jobs:
             -DROCKSDB_BUILD_SHARED=OFF -DPORTABLE=ON
           cmake --build build/c-api-tests --target c_test --parallel 2
       - name: Run C API tests
-        run: ctest --test-dir build/c-api-tests -R '^c_test$' --output-on-failure
+        run: ctest --test-dir build/c-api-tests -R '^c_test$' --timeout 60 --output-on-failure
 
   linux-x64:
     name: Linux x86_64

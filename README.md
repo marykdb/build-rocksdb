@@ -18,6 +18,9 @@ python3 rocksdb/tools/c_api_gen/verify_generated_up_to_date.py --clang-format cl
 
 The release workflow builds and runs `c_test` with assertions enabled and checks compatibility with the pinned previous Maryk revision before publishing artifacts.
 
+See [common API C wrappers](docs/common-api-c-wrappers.md) for range statistics,
+SST-property collections, clipping, ownership rules, and verification.
+
 ## Build workflow
 1. `build.sh` resolves the active host platform, accepts an optional Kotlin/Native version, and selects the configurations to compile (defaults are picked per host when no explicit list is provided).
 2. Kotlin/Native toolchains are installed on demand for cross-compilation targets before each build step runs.
