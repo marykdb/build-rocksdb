@@ -145,3 +145,10 @@ The packaged macOS positive control passed all six cases; substituting a
 codec-disabled engine made the same gate fail at Snappy open. Linux/Windows
 execution is gated by their release jobs. This is separate from the full-engine
 `make check` boundary above.
+
+The Windows smoke executable statically links its compiler runtimes and checks
+its PE import table for accidental libstdc++, libgcc or winpthread DLL imports.
+It runs through native Python with Windows paths and a 60-second timeout, so
+loader failures are reported directly instead of being hidden by MSYS timeout.
+Local cross-link validation with the WinLibs 9.5 sysroot confirms only Windows
+system DLL imports; actual Windows execution remains a hosted CI check.

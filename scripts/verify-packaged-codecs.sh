@@ -29,7 +29,10 @@ case "$(uname -s)" in
     ;;
   MINGW*|MSYS*|CYGWIN*)
     binary+=".exe"
-    link_args=(-Wl,--start-group "${libraries[@]}" -Wl,--end-group -lstdc++ -pthread -lshlwapi -lrpcrt4)
+    # Keep the validation executable independent of runner DLL search order.
+    # In particular, Git Bash can otherwise load a different libstdc++ or
+    # winpthread runtime before the WinLibs toolchain's DLLs.
+    link_args=(-static -Wl,--start-group "${libraries[@]}" -Wl,--end-group -lstdc++ -pthread -lshlwapi -lrpcrt4)
     ;;
   Darwin)
     link_args=("${libraries[@]}" -pthread)
@@ -39,8 +42,29 @@ esac
 "$cc" -std=c99 -Wall -Wextra -Werror -I "$include_dir" -c "$script_dir/verify-packaged-codecs.c" -o "$work/codec-smoke.o"
 "$cxx" "$work/codec-smoke.o" "${link_args[@]}" -o "$binary"
 
-# Bound engine execution, including on Windows where System32's timeout.exe
-# is not GNU timeout. Python is already available on the Windows/macOS runners.
+# Inspect the executable as well as the static package: a successful link
+# must not silently add a dependency on a runner-provided compiler runtime.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    imports="$("${OBJDUMP:-objdump}" -p "$binary")"
+    if printf '%s\n' "$imports" | grep -Ei 'DLL Name:.*(libstdc\+\+|libgcc|libwinpthread)' ; then
+      echo "Smoke executable unexpectedly imports a compiler runtime DLL" >&2
+      exit 1
+    fi
+    # Use native paths for native Python; MSYS timeout may obscure loader
+    # failures with exit 127 before any test output is produced.
+    binary="$(cygpath -w "$binary")"
+    database_dir="$(cygpath -w "$work/databases")"
+    python3 - "$binary" "$database_dir" <<'PYTHON'
+import subprocess
+import sys
+subprocess.run(sys.argv[1:], check=True, timeout=60)
+PYTHON
+    exit 0
+    ;;
+esac
+
+# Bound engine execution. Python is available on the macOS runners.
 if command -v timeout >/dev/null 2>&1 && [[ "$(timeout --version 2>/dev/null || true)" == *"GNU coreutils"* ]]; then
   timeout 60 "$binary" "$work/databases"
 else
