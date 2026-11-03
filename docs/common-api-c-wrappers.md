@@ -57,3 +57,72 @@ constructed properties map. JVM use can therefore fail with an
 API is covered by native tests, but common Kotlin range-properties exposure
 must wait for corrected JVM and Android JNI artifacts. The current C-only work
 does not claim to repair or republish those artifacts.
+
+## Java-compatible expansion (fork 8868be54a)
+
+The next expansion adds **110 C exports**, preserving all **2,082** exports
+from `5c38774f4269dcb823442d6c8036b5db13e40713`, for **2,192** total implemented
+exports. This is additive bridge work on the 11.8.1 engine. The earlier 19-export
+baseline and its release checks above describe the previous pinned bundle; they
+are not verification of this expansion.
+
+| Family | Added exports | Contract |
+| --- | ---: | --- |
+| Mutable CF/DB settings | 60 | 29 scalar CF getter/setter pairs and DB compaction wakeup getter/setter. Handles retain their existing clone/destruction rules; Kotlin applies only explicitly changed fields. |
+| Compression | 8 | Enabled/dictionary-training fields and normal/bottommost option attachment. Attachments copy values. Getters return independently owned compression-option handles, each destroyed with `rocksdb_compression_options_destroy`. |
+| Compaction concurrency | 7 | Shared limiter construction, name, limit/reset/count, destruction and option attachment. Zero blocks new tasks; negative limits remove the cap. Options share ownership after the wrapper is destroyed. |
+| Cache/rate diagnostics | 5 | HyperClock strict-capacity controls and limiter burst/byte/request counters. Counters measure real RocksDB I/O, not the broken JNI manual-request path. |
+| SST diagnostics | 11 | Seven legacy SST metadata fields, three live-file fields and tracked-file enumeration. Checksum/path views carry explicit lengths and must be copied before owner/callback expiry. Tracked-file enumeration snapshots the manager's map before invoking callbacks. |
+| Table properties | 7 | Index partition/encoding details and length-aware indexed property maps. Views borrow the collection or callback lifetime. Out-of-range map access returns null and zero length. These getters use the legacy `rocksdb_tableproperties_t` layout; never cast it to the distinct `rocksdb_table_properties_t` layout. |
+| Runtime readback/control | 4 | Owned current CF/DB option strings, and compaction abort/resume. Free strings with `rocksdb_free`; null CF selects the default. Abort/resume calls nest and must balance. |
+| Memtable factories | 3 | Skip-list lookahead, vector reservation and complete hash-linked-list configuration. Options retain the factory. Hash factories require a prefix extractor; nonconcurrent factories require concurrent memtable writes disabled. |
+| Batch visitor | 1 | All Java-supported records, including CF IDs, blob indexes and transaction markers. Data carries explicit binary lengths. Callback zero reports an aborted iteration; continuation zero is successful early termination. No exception may escape a C callback. Marker callback failure is reported after satisfying the engine's internal checked-status assertions. |
+| Extended events | 4 | Listener registration and borrowed copied-envelope accessors for file/SST/recovery/deletion events. Copy strings/properties before the callback returns. Listener callbacks may run on RocksDB threads; callers must synchronize their own state and handle failures inside callbacks. |
+
+Option strings expose the engine's full serialization. The Kotlin effective-option
+snapshots intentionally select only their documented portable scalar subset;
+these snapshots do not promise lossless round trips for enums, factories,
+callbacks or structured settings. Startup options remain the route for settings
+whose Java mutable serialization is broken.
+
+### Expansion verification boundary
+
+The new behavioral cases in `db/c_test.c` passed in the local macOS ARM64 Debug
+CMake C suite. They cover independently owned compression copies, shared resource
+ownership, real flush byte/request counters, cache and limiter controls, mutable
+readback before/after partial updates, metadata equality and copied lifetimes,
+tracked files, table-map bounds, built-in memtable read/write operation, all
+Java-supported batch record families, successful early termination, invalid
+callbacks and failures on transaction markers. The existing C suite and generated
+round trips also ran; no earlier Kotlin or release-matrix result is reused as a
+pass for the new wrappers.
+
+The source check, API completeness/link check, generated-file freshness and ABI
+compatibility against the 2,082-export baseline passed for this expansion.
+Repository-wide `AUTO_CLEAN=1 make -j2 check` and
+`AUTO_CLEAN=1 ASSERT_STATUS_CHECKED=1 make -j2 check` were attempted in separate
+source snapshots of fork `8868be54a` under `/tmp`. Both reached their 120-second
+wall limit while compiling database objects, before test execution. Neither
+reported a compiler or test failure before deliberate termination. These broad
+engine gates are **not certified complete** and must not be reported as passes.
+The snapshots excluded the unrelated untracked `db_test2` and did not alter
+shared build outputs. Published native archives and the full platform matrix
+still require the new build/release pipeline.
+
+### Java/JNI exclusions retained
+
+The C bridge does not repair Java/JNI 11.8.1. Common Kotlin therefore excludes:
+
+- Range-filtered table properties: JNI returns `long[]` instead of its map.
+- Compaction manual/output-prefix fields omitted by JNI statistics copying.
+- Manual `RateLimiter.request`, whose JNI calls an unimplemented old overload.
+- Live compression changes and live level-multiplier updates with broken Java
+  mutable-option serialization; startup configuration remains available.
+- Replay/trace filtering, current-WAL/extended inventory, newer transaction and
+  backup controls without a corresponding Java API.
+
+The supported event and property surfaces also preserve Java's limitations:
+handle-deletion callbacks do not inspect or retain the dying borrowed handle;
+flush/sync/truncate/close I/O events report no meaningful offset or length;
+Java-compatible property maps are string views, not lossless arbitrary binary
+maps. Native C map getters themselves remain length-aware.
