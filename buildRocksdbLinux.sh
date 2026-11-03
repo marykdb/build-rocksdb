@@ -37,7 +37,9 @@ CC_BIN="${CC:-}"
 CXX_BIN="${CXX:-}"
 AR_BIN="${AR:-}"
 RANLIB_BIN="${RANLIB:-}"
-EXTRA_C_FLAGS="-fPIC"
+# Enable the codecs built and shipped by buildDependencies.sh. CMake's codec
+# options default OFF, so library presence alone does not enable engine support.
+EXTRA_C_FLAGS="-fPIC -I${REPO_ROOT}/build/include -I${REPO_ROOT}/build/include/dependencies -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
 CMAKE_SYSTEM_PROCESSOR=""
 DEFAULT_CC=""
 DEFAULT_CXX=""

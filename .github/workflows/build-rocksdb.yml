@@ -50,7 +50,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             rocksdb-linux-legacy \
-            bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxX64'
+            bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxX64 && ./scripts/verify-packaged-codecs.sh build/archives/rocksdb-linux-x86_64.zip'
       - uses: actions/upload-artifact@v7
         with:
           name: rocksdb-linux-x86_64
@@ -73,7 +73,7 @@ jobs:
             -v "$PWD:/workspace" \
             -w /workspace \
             rocksdb-linux-legacy \
-            bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxArm64'
+            bash -lc 'git config --global --add safe.directory /workspace/rocksdb && ./build.sh linuxArm64 && ./scripts/verify-packaged-codecs.sh build/archives/rocksdb-linux-arm64.zip'
       - name: Ensure release tooling is available
         run: |
           sudo apt-get update
@@ -240,6 +240,8 @@ jobs:
             echo "LDFLAGS="
           } >> "$GITHUB_ENV"
           echo "$BIN_UNIX" >> "$GITHUB_PATH"
+      - name: Verify packaged MinGW compression codecs
+        run: ./scripts/verify-packaged-codecs.sh build/archives/rocksdb-mingw-x86_64.zip
       - name: Verify libstdc++ usage in MinGW build
         run: |
           set -euo pipefail

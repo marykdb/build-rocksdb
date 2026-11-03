@@ -209,6 +209,14 @@ if [[ -n "${TOOLCHAIN_TRIPLE:-}" ]]; then
   build_common::append_unique_array_flag cmake_toolchain_flags "-DCMAKE_CXX_COMPILER_TARGET=${TOOLCHAIN_TRIPLE}"
 fi
 
+# Match Apple/Android codec enablement while retaining the selected MinGW ABI,
+# sysroot and Windows-version flags. The dependency headers are target headers.
+CODEC_INCLUDE_ROOT="$(build_common::to_tool_path "${REPO_ROOT}/build/include")"
+CODEC_DEPENDENCY_INCLUDE_ROOT="$(build_common::to_tool_path "${REPO_ROOT}/build/include/dependencies")"
+CODEC_FLAGS="-I\"${CODEC_INCLUDE_ROOT}\" -I\"${CODEC_DEPENDENCY_INCLUDE_ROOT}\" -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD"
+EXTRA_C_FLAGS+=" ${CODEC_FLAGS}"
+EXTRA_CXX_FLAGS+=" ${CODEC_FLAGS}"
+
 echo "Building RocksDB for Windows (MinGW) with ARCH=${ARCH}"
 echo "Compiler: $CC / $CXX"
 

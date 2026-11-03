@@ -126,3 +126,22 @@ handle-deletion callbacks do not inspect or retain the dying borrowed handle;
 flush/sync/truncate/close I/O events report no meaningful offset or length;
 Java-compatible property maps are string views, not lossless arbitrary binary
 maps. Native C map getters themselves remain length-aware.
+
+## Packaged compression regression gate
+
+The first expansion's binding CI exposed a packaging defect: Linux and MinGW
+shipped codec archives but compiled the engine without their enablement macros.
+The recipe now enables the shipped zlib, bzip2, Snappy, LZ4 and ZSTD code paths,
+matching Apple and Android, and uses the target dependency headers.
+
+`scripts/verify-packaged-codecs.sh` links only the six packaged archives and
+checks Snappy, zlib, bzip2, LZ4, LZ4HC and ZSTD. Each case creates a compressed
+SST, checks the actual codec metadata and compressed size, closes and reopens
+the database, and verifies the decompressed bytes. The release workflow runs
+this gate in both Linux build containers and on the native Windows runner.
+The codec-agnostic Debug C API job remains unchanged.
+
+The packaged macOS positive control passed all six cases; substituting a
+codec-disabled engine made the same gate fail at Snappy open. Linux/Windows
+execution is gated by their release jobs. This is separate from the full-engine
+`make check` boundary above.
