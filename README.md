@@ -59,6 +59,23 @@ The archives are staged under `build/archives/` during a build and can be publis
 - Similarly, simulator builds for iOS, watchOS, and tvOS are arm64-only—aside from the macOS x86_64 build, there are no simulator x86_64 variants because developers are expected to be on Apple Silicon hardware five years after its introduction.
 - The `watchos-arm64` archive labelled above uses the `arm64_32` ABI (64-bit registers with 32-bit pointers) because that remains the deployment baseline for physical watches.
 
+### Windows filenames
+
+MinGW archives expect valid UTF-8 filenames, independently of the Windows system
+code page. Builds explicitly enable `WITH_WINDOWS_UTF8_FILENAMES`, which converts
+paths to UTF-16 before using wide Windows filesystem APIs. The packaged Windows
+smoke test covers Unicode parent directories, database reopen, backup and restore
+with accented, Turkish, CJK and supplementary characters under a legacy code page.
+
+This changes how non-ASCII filename bytes are interpreted compared with older
+archives that used the system code page. RocksDB's data format is unchanged.
+Existing incorrectly encoded directory names are not detected, renamed or migrated.
+Before upgrading, identify the actual source directory with Unicode-aware tools,
+retain a backup and verify an existing record with create-if-missing disabled.
+Do not automatically try alternate encodings: that could select another database.
+ASCII paths retain their meaning. Native callers must supply valid UTF-8; callers
+of Kotlin bindings should use the matching Unicode-aware binding release.
+
 ### Windows (MinGW) toolchain baseline
 - Continuous integration provisions [`llvm-mingw-20241030-ucrt-x86_64`](https://github.com/mstorsjo/llvm-mingw/releases/tag/20241030), the first long-lived toolchain built from LLVM 19. `./buildRocksdbMinGW.sh` and `buildDependencies.sh` automatically pick it up when `LLVM_MINGW_ROOT` points at the extracted directory.
 - Kotlin/Native still links MinGW targets with GCC 9.2's libstdc++ runtime, so the workflow also downloads the matching WinLibs sysroot to keep ABI compatibility when consuming the prebuilt archives.

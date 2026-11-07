@@ -240,7 +240,7 @@ jobs:
             echo "LDFLAGS="
           } >> "$GITHUB_ENV"
           echo "$BIN_UNIX" >> "$GITHUB_PATH"
-      - name: Verify packaged MinGW compression codecs
+      - name: Verify packaged MinGW codecs and Unicode recovery
         run: ./scripts/verify-packaged-codecs.sh build/archives/rocksdb-mingw-x86_64.zip
       - name: Verify libstdc++ usage in MinGW build
         run: |

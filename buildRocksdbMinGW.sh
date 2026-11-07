@@ -242,6 +242,7 @@ fi
 cmake_args+=(
   -G "Ninja"
   -DCMAKE_MAKE_PROGRAM=ninja
+  -DWITH_WINDOWS_UTF8_FILENAMES=ON
 )
 
 cmake_args+=(

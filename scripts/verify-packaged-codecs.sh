@@ -55,10 +55,15 @@ case "$(uname -s)" in
     # failures with exit 127 before any test output is produced.
     binary="$(cygpath -w "$binary")"
     database_dir="$(cygpath -w "$work/databases")"
-    python3 - "$binary" "$database_dir" <<'PYTHON'
+    unicode_binary="$work/unicode-smoke.exe"
+    "$cc" -std=c99 -Wall -Wextra -Werror -I "$include_dir" -c "$script_dir/verify-packaged-unicode.c" -o "$work/unicode-smoke.o"
+    "$cxx" -municode "$work/unicode-smoke.o" "${link_args[@]}" -o "$unicode_binary"
+    unicode_binary="$(cygpath -w "$unicode_binary")"
+    python3 - "$binary" "$database_dir" "$unicode_binary" <<'PYTHON'
 import subprocess
 import sys
-subprocess.run(sys.argv[1:], check=True, timeout=60)
+subprocess.run([sys.argv[1], sys.argv[2]], check=True, timeout=60)
+subprocess.run([sys.argv[3], sys.argv[2]], check=True, timeout=60)
 PYTHON
     exit 0
     ;;
