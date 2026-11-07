@@ -50,7 +50,9 @@ IOS_TOOLCHAIN_SHA256="c7f28f14ef4060a93151dbe9ae5591022550be9593afdc30deb0952241
 # zlib
 DEFAULT_ZLIB_VER="1.3.2"
 DEFAULT_ZLIB_SHA256="bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16"
-DEFAULT_ZLIB_DOWNLOAD_BASE="https://zlib.net"
+# Use the permanent archive for this pinned release; the top-level URL moves
+# when zlib publishes a new version. The pinned checksum still verifies it.
+DEFAULT_ZLIB_DOWNLOAD_BASE="https://zlib.net/fossils"
 
 # bzip2
 DEFAULT_BZIP2_VER="1.0.8"
